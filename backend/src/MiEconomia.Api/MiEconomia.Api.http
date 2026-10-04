@@ -1,0 +1,6 @@
+@MiEconomia.Api_HostAddress = http://localhost:5170
+
+GET {{MiEconomia.Api_HostAddress}}/health
+Accept: application/json
+
+###
