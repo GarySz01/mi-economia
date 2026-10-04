@@ -1,10 +1,12 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MiEconomia.Api;
 using MiEconomia.Api.Auth;
 using MiEconomia.Api.Data;
 using MiEconomia.Api.Domain;
@@ -72,8 +74,11 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
 });
 
-builder.Services.AddProblemDetails();
-builder.Services.AddControllers();
+builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = ProblemDetailsEs.Personalizar);
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        // Los enums viajan como texto ("Ingreso"/"Egreso") en lugar de números.
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
