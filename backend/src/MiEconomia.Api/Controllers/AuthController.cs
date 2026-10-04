@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using MiEconomia.Api.Auth;
+using MiEconomia.Api.Categorias;
+using MiEconomia.Api.Data;
 using MiEconomia.Api.Domain;
 
 namespace MiEconomia.Api.Controllers;
@@ -10,6 +12,7 @@ namespace MiEconomia.Api.Controllers;
 [ApiController]
 [Route("api/auth")]
 public class AuthController(
+    AppDbContext db,
     UserManager<Usuario> userManager,
     SignInManager<Usuario> signInManager,
     TokenService tokenService) : ControllerBase
@@ -28,6 +31,9 @@ public class AuthController(
             UserName = email,
         };
 
+        // UserManager usa el mismo AppDbContext, así que el usuario y sus categorías se guardan juntos o no se guarda nada.
+        await using var transaccion = await db.Database.BeginTransactionAsync();
+
         var resultado = await userManager.CreateAsync(usuario, request.Password);
         if (!resultado.Succeeded)
         {
@@ -39,6 +45,10 @@ public class AuthController(
             }
             return ValidationProblem(ModelState);
         }
+
+        db.Categorias.AddRange(CategoriasPorDefecto.Para(usuario.Id));
+        await db.SaveChangesAsync();
+        await transaccion.CommitAsync();
 
         return StatusCode(StatusCodes.Status201Created, CrearRespuesta(usuario));
     }
