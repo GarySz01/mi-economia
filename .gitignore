@@ -1,0 +1,26 @@
+# Entorno / secretos
+.env
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+
+# Node / React
+node_modules/
+dist/
+*.local
+npm-debug.log*
+
+# Editores / SO
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+.DS_Store
+
+# Claude Code (config local de cada máquina)
+.claude/settings.local.json
