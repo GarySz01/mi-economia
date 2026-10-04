@@ -26,6 +26,9 @@ backend/
     Categorias/ Movimientos/ Resumen/   DTOs de cada módulo (+ CategoriasPorDefecto)
     Controllers/            Auth, Categorias, Movimientos, Resumen
     ProblemDetailsEs.cs     Traduce al español los errores que genera ASP.NET Core
+  tests/MiEconomia.Api.Tests/
+    Infraestructura/        ApiFactory (API en memoria + PostgreSQL en Docker con Testcontainers), helpers HTTP y de datos
+    *Tests.cs               Tests de integración por módulo: Auth, Categorias, Movimientos, Aislamiento, Resumen
 frontend/
   vite.config.ts            Proxy /api -> http://localhost:5170 (en desarrollo no hace falta CORS)
   src/
@@ -44,6 +47,7 @@ Desde la raíz del repo:
 ```bash
 docker compose up -d                                   # levantar PostgreSQL
 dotnet build backend
+dotnet test backend                                    # tests de integración (necesita Docker corriendo)
 dotnet run --project backend/src/MiEconomia.Api        # http://localhost:5170/swagger
 
 # Frontend (desde frontend/; necesita la API corriendo)
@@ -97,7 +101,8 @@ Formato JSON: camelCase, enums como texto (`"Ingreso"`/`"Egreso"`), fechas `Date
 
 ## Flujo de trabajo
 
-- Probar cada endpoint nuevo de punta a punta con `curl`: casos correctos, validaciones y acceso con un segundo usuario. Después borrar los usuarios de prueba (`delete from "AspNetUsers" where "Email" in (...)`; el borrado en cascada elimina sus datos).
+- **Tests:** cada endpoint o regla nueva lleva tests de integración en `backend/tests`: casos correctos, validaciones (verificando el mensaje en español y su campo) y acceso desde otro usuario en `AislamientoTests`. Cada test crea sus propios usuarios con `api.NuevoUsuarioAsync()`, así no dependen unos de otros. `dotnet test backend` tiene que pasar antes de cada commit.
+- Si la API está corriendo (`dotnet run`), `dotnet build`/`dotnet test` fallan porque el `.exe` está bloqueado: detenerla antes.
 - Un commit por funcionalidad terminada, con un mensaje en español, y solo cuando el usuario lo confirma.
 
 ## Entorno (Windows 10)

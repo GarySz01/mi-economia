@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -38,15 +40,19 @@ builder.Services.AddOptions<JwtOptions>()
     .BindConfiguration(JwtOptions.Seccion)
     .ValidateDataAnnotations()
     .ValidateOnStart();
-var jwt = builder.Configuration.GetSection(JwtOptions.Seccion).Get<JwtOptions>() ?? new JwtOptions();
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<TokenService>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+    .AddJwtBearer();
+// Se configura con IOptions<JwtOptions> (y no leyendo la configuración acá arriba) para que tome
+// los valores definitivos, incluidos los que inyectan los tests de integración.
+builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
+    .Configure<IOptions<JwtOptions>>((options, jwtOptions) =>
     {
+        var jwt = jwtOptions.Value;
         // Mantiene los nombres originales de los claims ("sub", "email") en lugar de mapearlos a los de .NET.
         options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
@@ -64,15 +70,18 @@ builder.Services
     });
 builder.Services.AddAuthorization();
 
-// Limita registro/login a 10 intentos por minuto por IP, contra ataques de fuerza bruta.
-builder.Services.AddRateLimiter(options =>
-{
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy(RateLimits.Auth, httpContext =>
-        RateLimitPartition.GetFixedWindowLimiter(
-            httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
-});
+// Limita registro/login por IP (RateLimit:AuthPorMinuto, 10 por defecto), contra ataques de fuerza bruta.
+builder.Services.AddRateLimiter(_ => { });
+builder.Services.AddOptions<RateLimiterOptions>()
+    .Configure<IConfiguration>((options, configuracion) =>
+    {
+        var intentosPorMinuto = configuracion.GetValue("RateLimit:AuthPorMinuto", 10);
+        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+        options.AddPolicy(RateLimits.Auth, httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                httpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = intentosPorMinuto, Window = TimeSpan.FromMinutes(1) }));
+    });
 
 builder.Services.AddProblemDetails(options => options.CustomizeProblemDetails = ProblemDetailsEs.Personalizar);
 builder.Services.AddControllers()
@@ -119,3 +128,6 @@ app.MapGet("/health", async (AppDbContext db) =>
         : Results.Problem("No se puede conectar a la base de datos"));
 
 app.Run();
+
+// Permite que los tests de integración (WebApplicationFactory<Program>) accedan a esta clase.
+public partial class Program;
