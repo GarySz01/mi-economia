@@ -1,4 +1,3 @@
-import { Check } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { ApiError } from '../api/cliente'
 import { useGuardarCategoria } from '../api/consultas'
@@ -6,6 +5,7 @@ import type { Categoria, TipoMovimiento } from '../api/tipos'
 import { COLORES, ICONOS } from '../lib/iconos'
 import { IconoCategoria } from './IconoCategoria'
 import { Modal } from './Modal'
+import { SelectorColor } from './SelectorColor'
 import { Alerta, Boton, Campo, Segmentado } from './ui'
 
 interface Props {
@@ -85,24 +85,7 @@ function Formulario({
         />
       )}
 
-      <fieldset>
-        <legend className="mb-2 text-sm font-medium text-slate-700">Color</legend>
-        <div className="flex flex-wrap gap-2">
-          {COLORES.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setColor(c)}
-              className="flex size-8 items-center justify-center rounded-full ring-offset-2 transition hover:scale-110 focus-visible:ring-2 focus-visible:ring-slate-400"
-              style={{ backgroundColor: c }}
-              aria-label={`Color ${c}`}
-              aria-pressed={color === c}
-            >
-              {color === c && <Check className="size-4 text-white" aria-hidden />}
-            </button>
-          ))}
-        </div>
-      </fieldset>
+      <SelectorColor valor={color} onChange={setColor} />
 
       <fieldset>
         <legend className="mb-2 text-sm font-medium text-slate-700">Ícono</legend>

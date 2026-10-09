@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using MiEconomia.Api.Auth;
+using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Data;
 using Testcontainers.PostgreSql;
 
@@ -52,11 +53,15 @@ public class ApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
         var auth = await respuesta.LeerAsync<AuthResponse>(System.Net.HttpStatusCode.Created);
 
         cliente.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
-        return new Sesion(cliente, auth, email);
+
+        // Al registrarse se crea una única cuenta (CuentaPorDefecto); se usa en los movimientos que no indican otra.
+        var cuentas = await (await cliente.GetAsync("/api/cuentas")).LeerAsync<List<CuentaResponse>>();
+        return new Sesion(cliente, auth, email, cuentas.Single().Id);
     }
 }
 
-public record Sesion(HttpClient Cliente, AuthResponse Auth, string Email)
+/// <param name="CuentaId">La cuenta que se crea al registrarse.</param>
+public record Sesion(HttpClient Cliente, AuthResponse Auth, string Email, Guid CuentaId)
 {
     public const string Password = "clave1234";
 }

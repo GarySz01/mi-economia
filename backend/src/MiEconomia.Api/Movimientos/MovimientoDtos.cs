@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using MiEconomia.Api.Categorias;
+using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Domain;
 
 namespace MiEconomia.Api.Movimientos;
@@ -7,6 +8,9 @@ namespace MiEconomia.Api.Movimientos;
 public record GuardarMovimientoRequest(
     [Required(ErrorMessage = "La categoría es obligatoria.")]
     Guid? CategoriaId,
+
+    [Required(ErrorMessage = "La cuenta es obligatoria.")]
+    Guid? CuentaId,
 
     [Required(ErrorMessage = "El monto es obligatorio.")]
     [Range(typeof(decimal), "0.01", "9999999999999999.99",
@@ -24,16 +28,18 @@ public record MovimientoResponse(
     decimal Monto,
     DateOnly Fecha,
     string? Nota,
-    CategoriaResponse Categoria)
+    CategoriaResponse Categoria,
+    CuentaBasicaResponse Cuenta)
 {
     public static MovimientoResponse Desde(Movimiento m) =>
-        new(m.Id, m.Monto, m.Fecha, m.Nota, CategoriaResponse.Desde(m.Categoria));
+        new(m.Id, m.Monto, m.Fecha, m.Nota, CategoriaResponse.Desde(m.Categoria), CuentaBasicaResponse.Desde(m.Cuenta));
 }
 
 public record MovimientosFiltro(
     DateOnly? Desde,
     DateOnly? Hasta,
     Guid? CategoriaId,
+    Guid? CuentaId,
     TipoMovimiento? Tipo,
     [Range(1, int.MaxValue, ErrorMessage = "La página empieza en 1.")]
     int Pagina = 1,

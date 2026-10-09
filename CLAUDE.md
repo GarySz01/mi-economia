@@ -20,15 +20,15 @@ backend/
   MiEconomia.sln
   .config/dotnet-tools.json dotnet-ef como herramienta local
   src/MiEconomia.Api/
-    Domain/                 Entidades: Usuario (IdentityUser<Guid>), Categoria, Movimiento, TipoMovimiento
+    Domain/                 Entidades: Usuario (IdentityUser<Guid>), Categoria, Movimiento, TipoMovimiento, Cuenta, TipoCuenta, Transferencia
     Data/                   AppDbContext y Migrations/
     Auth/                   JWT, DTOs de auth, mensajes de Identity en español, rate limit
-    Categorias/ Movimientos/ Resumen/   DTOs de cada módulo (+ CategoriasPorDefecto)
-    Controllers/            Auth, Categorias, Movimientos, Resumen
+    Categorias/ Cuentas/ Movimientos/ Transferencias/ Resumen/   DTOs de cada módulo (+ CategoriasPorDefecto, CuentaPorDefecto, Saldos)
+    Controllers/            Auth, Categorias, Cuentas, Movimientos, Transferencias, Resumen
     ProblemDetailsEs.cs     Traduce al español los errores que genera ASP.NET Core
   tests/MiEconomia.Api.Tests/
     Infraestructura/        ApiFactory (API en memoria + PostgreSQL en Docker con Testcontainers), helpers HTTP y de datos
-    *Tests.cs               Tests de integración por módulo: Auth, Categorias, Movimientos, Aislamiento, Resumen
+    *Tests.cs               Tests de integración por módulo: Auth, Categorias, Cuentas, Movimientos, Transferencias, Aislamiento, Resumen
 frontend/
   vite.config.ts            Proxy /api -> http://localhost:5170 (en desarrollo no hace falta CORS)
   src/
@@ -36,8 +36,8 @@ frontend/
     auth/                   AuthProvider (sesión en localStorage) y useAuth
     components/             ui.tsx (Boton, Campo, Select, Tarjeta…), Modal, formularios, Layout
     hooks/                  useMesSeleccionado (mes en la URL: ?mes=2026-10)
-    lib/                    formato.ts (montos, fechas, meses), iconos.ts (íconos y colores elegibles)
-    pages/                  Acceso (login/registro), Panel, Movimientos, Categorias
+    lib/                    formato.ts (montos, fechas, meses), iconos.ts (íconos y colores elegibles), cuentas.ts (tipos de cuenta con su ícono)
+    pages/                  Acceso (login/registro), Panel, Movimientos, Cuentas (y transferencias), Categorias
 ```
 
 ## Comandos
@@ -73,9 +73,11 @@ Todo bajo `/api`, y todo pide `Authorization: Bearer <token>` salvo registro y l
 |---|---|
 | `POST auth/registro`, `POST auth/login`, `GET auth/yo` | Devuelven `{ token, expiraEn, usuario }`. El token dura 60 min, todavía sin refresh token |
 | `categorias` (GET con `?tipo=`, GET/POST/PUT/DELETE `{id}`) | El tipo no se puede editar. Borrar con movimientos da 409 |
-| `movimientos` (GET con `desde, hasta, categoriaId, tipo, pagina, tamanio`) | Devuelve `{ items, total, pagina, tamanio }` |
+| `movimientos` (GET con `desde, hasta, categoriaId, cuentaId, tipo, pagina, tamanio`) | Devuelve `{ items, total, pagina, tamanio }`. Cada movimiento pide `cuentaId` |
+| `cuentas` (GET, GET/POST/PUT/DELETE `{id}`) | Devuelven el `saldo` actual (saldo inicial + ingresos − gastos ± transferencias), calculado en la base. El tipo se puede editar. Borrar con movimientos o transferencias da 409 |
+| `transferencias` (GET con `desde, hasta, cuentaId, pagina, tamanio`) | Origen y destino del mismo usuario y distintos entre sí. No son ingreso ni gasto |
 | `resumen?desde=&hasta=` | Totales y desglose por categoría; sin fechas usa el mes actual |
-| `resumen/mensual?meses=&hasta=` | Un elemento por mes, incluidos los meses vacíos |
+| `resumen/mensual?meses=&hasta=` | Un elemento por mes, incluidos los meses vacíos. Los dos resúmenes aceptan `cuentaId` y no incluyen transferencias |
 
 Formato JSON: camelCase, enums como texto (`"Ingreso"`/`"Egreso"`), fechas `DateOnly` como `"2026-10-01"`, montos `decimal(18,2)`.
 
@@ -91,7 +93,7 @@ Formato JSON: camelCase, enums como texto (`"Ingreso"`/`"Egreso"`), fechas `Date
 ### Frontend
 
 - **Tipos:** `src/api/tipos.ts` refleja los DTOs del backend; si cambia un DTO, actualizarlo ahí.
-- **Datos del servidor:** siempre con los hooks de `api/consultas.ts`. Las mutaciones invalidan las claves afectadas: un movimiento afecta al listado y al resumen; una categoría, a todo.
+- **Datos del servidor:** siempre con los hooks de `api/consultas.ts`. Las mutaciones invalidan las claves afectadas: un movimiento afecta al listado, al resumen y a los saldos de las cuentas; una transferencia, a su listado y a los saldos; una categoría o una cuenta, a todo lo que las muestra.
 - **Errores:** se muestran los mensajes de `ApiError` tal cual (vienen en español). Los de un campo se leen con `error.campo('monto')` (en camelCase) y el general con `error.message`.
 - **Fechas:** se manejan como texto `yyyy-MM-dd` en hora local, con las funciones de `lib/formato.ts`. Nunca `toISOString()`, porque pasa a UTC y puede correr la fecha un día.
 - **Montos:** el usuario puede escribir `1.500,50` o `1500.5`; se convierten con `parsearMonto`.

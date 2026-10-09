@@ -3,6 +3,7 @@ import { useAuth } from './auth/contexto'
 import { Layout } from './components/Layout'
 import { Acceso } from './pages/Acceso'
 import { Categorias } from './pages/Categorias'
+import { Cuentas } from './pages/Cuentas'
 import { Movimientos } from './pages/Movimientos'
 import { Panel } from './pages/Panel'
 
@@ -29,6 +30,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Panel />} />
           <Route path="/movimientos" element={<Movimientos />} />
+          <Route path="/cuentas" element={<Cuentas />} />
           <Route path="/categorias" element={<Categorias />} />
         </Route>
       </Route>

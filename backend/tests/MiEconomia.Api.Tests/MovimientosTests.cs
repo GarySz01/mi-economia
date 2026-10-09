@@ -1,4 +1,5 @@
 using System.Net;
+using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Domain;
 using MiEconomia.Api.Movimientos;
 using MiEconomia.Api.Tests.Infraestructura;
@@ -46,7 +47,7 @@ public class MovimientosTests(ApiFactory api)
     {
         var sesion = await api.NuevoUsuarioAsync();
         var categoria = await sesion.CrearCategoriaAsync("Comida", TipoMovimiento.Egreso);
-        var json = $$"""{ "categoriaId": "{{categoria.Id}}", "monto": {{monto}}, "fecha": "2026-10-01" }""";
+        var json = $$"""{ "categoriaId": "{{categoria.Id}}", "cuentaId": "{{sesion.CuentaId}}", "monto": {{monto}}, "fecha": "2026-10-01" }""";
 
         var respuesta = await sesion.Cliente.PostAsync("/api/movimientos",
             new StringContent(json, System.Text.Encoding.UTF8, "application/json"));
@@ -64,6 +65,7 @@ public class MovimientosTests(ApiFactory api)
 
         var problema = await respuesta.LeerProblemaAsync(HttpStatusCode.BadRequest);
         Assert.Equal(["La categoría es obligatoria."], problema.De("CategoriaId"));
+        Assert.Equal(["La cuenta es obligatoria."], problema.De("CuentaId"));
         Assert.Equal(["El monto es obligatorio."], problema.De("Monto"));
         Assert.Equal(["La fecha es obligatoria."], problema.De("Fecha"));
     }
@@ -74,10 +76,50 @@ public class MovimientosTests(ApiFactory api)
         var sesion = await api.NuevoUsuarioAsync();
 
         var respuesta = await sesion.Cliente.PostJsonAsync("/api/movimientos",
-            new { categoriaId = Guid.NewGuid(), monto = 10, fecha = "2026-10-01" });
+            new { categoriaId = Guid.NewGuid(), cuentaId = sesion.CuentaId, monto = 10, fecha = "2026-10-01" });
 
         var problema = await respuesta.LeerProblemaAsync(HttpStatusCode.BadRequest);
         Assert.Equal(["La categoría no existe."], problema.De("CategoriaId"));
+    }
+
+    [Fact]
+    public async Task Cuenta_inexistente_devuelve_400()
+    {
+        var sesion = await api.NuevoUsuarioAsync();
+        var comida = await sesion.CrearCategoriaAsync("Comida", TipoMovimiento.Egreso);
+
+        var respuesta = await sesion.Cliente.PostJsonAsync("/api/movimientos",
+            new { categoriaId = comida.Id, cuentaId = Guid.NewGuid(), monto = 10, fecha = "2026-10-01" });
+
+        var problema = await respuesta.LeerProblemaAsync(HttpStatusCode.BadRequest);
+        Assert.Equal(["La cuenta no existe."], problema.De("CuentaId"));
+    }
+
+    [Fact]
+    public async Task Crear_devuelve_la_cuenta_del_movimiento()
+    {
+        var sesion = await api.NuevoUsuarioAsync();
+        var comida = await sesion.CrearCategoriaAsync("Comida", TipoMovimiento.Egreso);
+        var tarjeta = await sesion.CrearCuentaAsync("Visa", TipoCuenta.TarjetaCredito);
+
+        var movimiento = await sesion.CrearMovimientoAsync(comida.Id, 10, "2026-10-01", cuentaId: tarjeta.Id);
+
+        Assert.Equal(new CuentaBasicaResponse(tarjeta.Id, "Visa", TipoCuenta.TarjetaCredito, null), movimiento.Cuenta);
+    }
+
+    [Fact]
+    public async Task Listar_filtra_por_cuenta()
+    {
+        var sesion = await api.NuevoUsuarioAsync();
+        var comida = await sesion.CrearCategoriaAsync("Comida", TipoMovimiento.Egreso);
+        var banco = await sesion.CrearCuentaAsync("Banco");
+        await sesion.CrearMovimientoAsync(comida.Id, 10, "2026-10-01");
+        await sesion.CrearMovimientoAsync(comida.Id, 20, "2026-10-01", cuentaId: banco.Id);
+
+        var pagina = await (await sesion.Cliente.GetAsync($"/api/movimientos?cuentaId={banco.Id}"))
+            .LeerAsync<PaginaResponse<MovimientoResponse>>();
+
+        Assert.Equal(20m, Assert.Single(pagina.Items).Monto);
     }
 
     [Fact]
@@ -139,18 +181,20 @@ public class MovimientosTests(ApiFactory api)
     }
 
     [Fact]
-    public async Task Actualizar_cambia_todos_los_campos_incluida_la_categoria()
+    public async Task Actualizar_cambia_todos_los_campos_incluidas_la_categoria_y_la_cuenta()
     {
         var sesion = await api.NuevoUsuarioAsync();
         var comida = await sesion.CrearCategoriaAsync("Comida", TipoMovimiento.Egreso);
         var regalos = await sesion.CrearCategoriaAsync("Regalos", TipoMovimiento.Ingreso);
+        var banco = await sesion.CrearCuentaAsync("Banco");
         var movimiento = await sesion.CrearMovimientoAsync(comida.Id, 100, "2026-10-01", "Original");
 
         var respuesta = await sesion.Cliente.PutJsonAsync($"/api/movimientos/{movimiento.Id}",
-            new { categoriaId = regalos.Id, monto = 250.75m, fecha = "2026-10-05", nota = "Cumpleaños" });
+            new { categoriaId = regalos.Id, cuentaId = banco.Id, monto = 250.75m, fecha = "2026-10-05", nota = "Cumpleaños" });
 
         var actualizado = await respuesta.LeerAsync<MovimientoResponse>();
-        Assert.Equal(new MovimientoResponse(movimiento.Id, 250.75m, new DateOnly(2026, 10, 5), "Cumpleaños", regalos), actualizado);
+        Assert.Equal(new MovimientoResponse(movimiento.Id, 250.75m, new DateOnly(2026, 10, 5), "Cumpleaños", regalos,
+            new CuentaBasicaResponse(banco.Id, "Banco", TipoCuenta.CuentaBancaria, null)), actualizado);
     }
 
     [Fact]

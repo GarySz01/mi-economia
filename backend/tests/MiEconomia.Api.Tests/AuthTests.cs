@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using MiEconomia.Api.Auth;
 using MiEconomia.Api.Categorias;
+using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Domain;
 using MiEconomia.Api.Tests.Infraestructura;
 
@@ -39,6 +40,17 @@ public class AuthTests(ApiFactory api)
         Assert.Equal(4, categorias.Count(c => c.Tipo == TipoMovimiento.Ingreso));
         Assert.Contains(categorias, c => c is { Nombre: "Sueldo", Tipo: TipoMovimiento.Ingreso, Icono: "briefcase" });
         Assert.Contains(categorias, c => c is { Nombre: "Supermercado", Tipo: TipoMovimiento.Egreso, Color: "#EA580C" });
+    }
+
+    [Fact]
+    public async Task Registro_crea_la_cuenta_de_efectivo_sin_saldo()
+    {
+        var sesion = await api.NuevoUsuarioAsync();
+
+        var cuentas = await (await sesion.Cliente.GetAsync("/api/cuentas")).LeerAsync<List<CuentaResponse>>();
+
+        var cuenta = Assert.Single(cuentas);
+        Assert.Equal(new CuentaResponse(cuenta.Id, "Efectivo", TipoCuenta.Efectivo, "#16A34A", 0, 0), cuenta);
     }
 
     [Fact]
@@ -126,6 +138,8 @@ public class AuthTests(ApiFactory api)
     [InlineData("/api/auth/yo")]
     [InlineData("/api/categorias")]
     [InlineData("/api/movimientos")]
+    [InlineData("/api/cuentas")]
+    [InlineData("/api/transferencias")]
     [InlineData("/api/resumen")]
     [InlineData("/api/resumen/mensual")]
     public async Task Endpoints_protegidos_sin_token_devuelven_401(string url)

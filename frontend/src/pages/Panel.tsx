@@ -2,7 +2,7 @@ import { ArrowDownCircle, ArrowUpCircle, Plus, Scale } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { useMovimientos, useResumen, useResumenMensual } from '../api/consultas'
+import { useCuentas, useMovimientos, useResumen, useResumenMensual } from '../api/consultas'
 import type { Movimiento, TotalMensual, TotalPorCategoria } from '../api/tipos'
 import { useAuth } from '../auth/contexto'
 import { FilaMovimiento } from '../components/FilaMovimiento'
@@ -12,6 +12,7 @@ import { useMesSeleccionado } from '../hooks/useMesSeleccionado'
 import { Alerta, Boton, Cargando, Tarjeta, Vacio } from '../components/ui'
 import { formatMonto, formatMontoCorto, nombreMesCorto, rangoDelMes } from '../lib/formato'
 import { IconoCategoria } from '../components/IconoCategoria'
+import { IconoCuenta } from '../components/IconoCuenta'
 import { COLOR_POR_DEFECTO } from '../lib/iconos'
 
 export function Panel() {
@@ -57,6 +58,8 @@ export function Panel() {
           color={(datos?.balance ?? 0) < 0 ? 'text-rose-600' : 'text-slate-900'}
         />
       </div>
+
+      <SaldosCuentas />
 
       {resumen.isLoading ? (
         <Cargando />
@@ -117,6 +120,40 @@ export function Panel() {
         onCerrar={() => setFormulario({ abierto: false, movimiento: null })}
       />
     </div>
+  )
+}
+
+/** Saldo actual de cada cuenta (no depende del mes elegido). */
+function SaldosCuentas() {
+  const { data: cuentas } = useCuentas()
+  if (!cuentas?.length) return null
+  const total = cuentas.reduce((suma, c) => suma + c.saldo, 0)
+
+  return (
+    <Tarjeta>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-semibold text-slate-900">
+          Tus cuentas{' '}
+          <span className={`ml-1 font-normal tabular-nums ${total < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+            {formatMonto(total)}
+          </span>
+        </h2>
+        <Link to="/cuentas" className="text-sm font-medium text-emerald-700 hover:underline">
+          Ver cuentas
+        </Link>
+      </div>
+      <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+        {cuentas.map((c) => (
+          <li key={c.id} className="flex items-center gap-3">
+            <IconoCuenta cuenta={c} tamanio="sm" />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700">{c.nombre}</span>
+            <span className={`shrink-0 text-sm tabular-nums ${c.saldo < 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+              {formatMonto(c.saldo)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Tarjeta>
   )
 }
 

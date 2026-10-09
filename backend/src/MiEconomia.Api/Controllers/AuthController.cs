@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using MiEconomia.Api.Auth;
 using MiEconomia.Api.Categorias;
+using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Data;
 using MiEconomia.Api.Domain;
 
@@ -31,7 +32,7 @@ public class AuthController(
             UserName = email,
         };
 
-        // UserManager usa el mismo AppDbContext, así que el usuario y sus categorías se guardan juntos o no se guarda nada.
+        // UserManager usa el mismo AppDbContext, así que el usuario, sus categorías y su cuenta se guardan juntos o no se guarda nada.
         await using var transaccion = await db.Database.BeginTransactionAsync();
 
         var resultado = await userManager.CreateAsync(usuario, request.Password);
@@ -47,6 +48,7 @@ public class AuthController(
         }
 
         db.Categorias.AddRange(CategoriasPorDefecto.Para(usuario.Id));
+        db.Cuentas.Add(CuentaPorDefecto.Para(usuario.Id));
         await db.SaveChangesAsync();
         await transaccion.CommitAsync();
 

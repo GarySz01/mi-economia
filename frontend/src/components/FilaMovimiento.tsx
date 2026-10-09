@@ -13,6 +13,10 @@ interface Props {
 
 export function FilaMovimiento({ movimiento: m, onEditar, onEliminar, sinFecha }: Props) {
   const esIngreso = m.categoria.tipo === 'Ingreso'
+  // Si hay nota, el título es la nota y la categoría pasa al detalle.
+  const detalle = [m.nota ? m.categoria.nombre : null, m.cuenta.nombre, sinFecha ? null : formatFecha(m.fecha)]
+    .filter(Boolean)
+    .join(' · ')
   return (
     <li className="group flex items-center gap-3 py-3">
       <button
@@ -23,11 +27,7 @@ export function FilaMovimiento({ movimiento: m, onEditar, onEliminar, sinFecha }
         <IconoCategoria icono={m.categoria.icono} color={m.categoria.color} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium text-slate-800">{m.nota || m.categoria.nombre}</span>
-          <span className="block truncate text-xs text-slate-500">
-            {m.nota ? m.categoria.nombre : null}
-            {m.nota && !sinFecha ? ' · ' : null}
-            {sinFecha ? null : formatFecha(m.fecha)}
-          </span>
+          <span className="block truncate text-xs text-slate-500">{detalle}</span>
         </span>
         <span className={`shrink-0 text-sm font-semibold tabular-nums ${esIngreso ? 'text-emerald-600' : 'text-slate-800'}`}>
           {esIngreso ? '+' : '-'}

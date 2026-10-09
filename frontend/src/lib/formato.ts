@@ -91,3 +91,15 @@ export function parsearMonto(texto: string) {
   }
   return limpio === '' || !/^\d+(\.\d+)?$/.test(limpio) ? NaN : Number(limpio)
 }
+
+/** Como parsearMonto, pero acepta un signo menos adelante ("-20.000"). Vacío equivale a 0. */
+export function parsearMontoConSigno(texto: string) {
+  const limpio = texto.trim()
+  if (limpio === '') return 0
+  return limpio.startsWith('-') ? -parsearMonto(limpio.slice(1)) : parsearMonto(limpio)
+}
+
+/** Monto para mostrar en un campo editable: 1500.5 -> "1500,5". */
+export function montoParaEditar(valor: number) {
+  return String(valor).replace('.', ',')
+}

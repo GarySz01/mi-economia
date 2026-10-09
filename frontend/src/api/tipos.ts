@@ -29,6 +29,57 @@ export interface CategoriaInput {
   icono: string | null
 }
 
+export type TipoCuenta = 'Efectivo' | 'CuentaBancaria' | 'TarjetaCredito' | 'BilleteraVirtual' | 'Inversion' | 'Otra'
+
+/** Datos de la cuenta que vienen dentro de un movimiento o una transferencia (sin saldo). */
+export interface CuentaBasica {
+  id: string
+  nombre: string
+  tipo: TipoCuenta
+  color: string | null
+}
+
+export interface Cuenta extends CuentaBasica {
+  /** Puede ser negativo (por ejemplo, la deuda de una tarjeta). */
+  saldoInicial: number
+  /** Saldo actual: inicial + ingresos − gastos ± transferencias. */
+  saldo: number
+}
+
+export interface CuentaInput {
+  nombre: string
+  tipo: TipoCuenta
+  saldoInicial: number
+  color: string | null
+}
+
+export interface Transferencia {
+  id: string
+  monto: number
+  /** Formato yyyy-MM-dd */
+  fecha: string
+  nota: string | null
+  origen: CuentaBasica
+  destino: CuentaBasica
+}
+
+export interface TransferenciaInput {
+  cuentaOrigenId: string
+  cuentaDestinoId: string
+  monto: number
+  fecha: string
+  nota: string | null
+}
+
+export interface TransferenciasFiltro {
+  desde?: string
+  hasta?: string
+  /** Transferencias en las que participa la cuenta, como origen o destino. */
+  cuentaId?: string
+  pagina?: number
+  tamanio?: number
+}
+
 export interface Movimiento {
   id: string
   monto: number
@@ -36,10 +87,12 @@ export interface Movimiento {
   fecha: string
   nota: string | null
   categoria: Categoria
+  cuenta: CuentaBasica
 }
 
 export interface MovimientoInput {
   categoriaId: string
+  cuentaId: string
   monto: number
   fecha: string
   nota: string | null
@@ -49,6 +102,7 @@ export interface MovimientosFiltro {
   desde?: string
   hasta?: string
   categoriaId?: string
+  cuentaId?: string
   tipo?: TipoMovimiento
   pagina?: number
   tamanio?: number

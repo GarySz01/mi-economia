@@ -16,7 +16,7 @@ public class MovimientosController(AppDbContext db) : ControllerBase
     private Guid UsuarioId => User.GetUsuarioId();
 
     private IQueryable<Movimiento> MisMovimientos =>
-        db.Movimientos.Include(m => m.Categoria).Where(m => m.UsuarioId == UsuarioId);
+        db.Movimientos.Include(m => m.Categoria).Include(m => m.Cuenta).Where(m => m.UsuarioId == UsuarioId);
 
     [HttpGet]
     [ProducesResponseType<PaginaResponse<MovimientoResponse>>(StatusCodes.Status200OK)]
@@ -36,6 +36,8 @@ public class MovimientosController(AppDbContext db) : ControllerBase
             query = query.Where(m => m.Fecha <= filtro.Hasta);
         if (filtro.CategoriaId is not null)
             query = query.Where(m => m.CategoriaId == filtro.CategoriaId);
+        if (filtro.CuentaId is not null)
+            query = query.Where(m => m.CuentaId == filtro.CuentaId);
         if (filtro.Tipo is not null)
             query = query.Where(m => m.Categoria.Tipo == filtro.Tipo);
 
@@ -115,11 +117,19 @@ public class MovimientosController(AppDbContext db) : ControllerBase
         if (categoria is null)
             ModelState.AddModelError(nameof(request.CategoriaId), "La categoría no existe.");
 
+        // Lo mismo con la cuenta.
+        var cuenta = await db.Cuentas
+            .FirstOrDefaultAsync(c => c.Id == request.CuentaId && c.UsuarioId == UsuarioId);
+        if (cuenta is null)
+            ModelState.AddModelError(nameof(request.CuentaId), "La cuenta no existe.");
+
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
 
         movimiento.Categoria = categoria!;
         movimiento.CategoriaId = categoria!.Id;
+        movimiento.Cuenta = cuenta!;
+        movimiento.CuentaId = cuenta!.Id;
         movimiento.Monto = monto;
         movimiento.Fecha = request.Fecha!.Value;
         movimiento.Nota = string.IsNullOrWhiteSpace(request.Nota) ? null : request.Nota.Trim();

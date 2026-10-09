@@ -18,6 +18,12 @@ public class ResumenController(AppDbContext db, TimeProvider tiempo) : Controlle
 
     private DateOnly Hoy => DateOnly.FromDateTime(tiempo.GetLocalNow().DateTime);
 
+    private IQueryable<Movimiento> MisMovimientos(Guid? cuentaId)
+    {
+        var query = db.Movimientos.Where(m => m.UsuarioId == UsuarioId);
+        return cuentaId is null ? query : query.Where(m => m.CuentaId == cuentaId);
+    }
+
     /// <summary>Totales de ingresos, egresos y balance de un período, con el desglose por categoría.</summary>
     [HttpGet]
     [ProducesResponseType<ResumenResponse>(StatusCodes.Status200OK)]
@@ -34,8 +40,8 @@ public class ResumenController(AppDbContext db, TimeProvider tiempo) : Controlle
         }
 
         // La suma se hace en la base; solo vuelve una fila por categoría.
-        var totales = await db.Movimientos
-            .Where(m => m.UsuarioId == UsuarioId && m.Fecha >= desde && m.Fecha <= hasta)
+        var totales = await MisMovimientos(filtro.CuentaId)
+            .Where(m => m.Fecha >= desde && m.Fecha <= hasta)
             .GroupBy(m => m.CategoriaId)
             .Select(g => new { CategoriaId = g.Key, Total = g.Sum(m => m.Monto), Cantidad = g.Count() })
             .ToListAsync();
@@ -78,8 +84,8 @@ public class ResumenController(AppDbContext db, TimeProvider tiempo) : Controlle
         var primerMes = ultimoMes.AddMonths(-(filtro.Meses - 1));
         var hasta = ultimoMes.AddMonths(1).AddDays(-1);
 
-        var totales = await db.Movimientos
-            .Where(m => m.UsuarioId == UsuarioId && m.Fecha >= primerMes && m.Fecha <= hasta)
+        var totales = await MisMovimientos(filtro.CuentaId)
+            .Where(m => m.Fecha >= primerMes && m.Fecha <= hasta)
             .GroupBy(m => new { m.Fecha.Year, m.Fecha.Month, m.Categoria.Tipo })
             .Select(g => new { g.Key.Year, g.Key.Month, g.Key.Tipo, Total = g.Sum(m => m.Monto) })
             .ToListAsync();

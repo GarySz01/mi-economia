@@ -1,6 +1,7 @@
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
-import { useCategorias, useEliminarMovimiento, useMovimientos } from '../api/consultas'
+import { useSearchParams } from 'react-router'
+import { useCategorias, useCuentas, useEliminarMovimiento, useMovimientos } from '../api/consultas'
 import type { Movimiento, TipoMovimiento } from '../api/tipos'
 import { Confirmar } from '../components/Confirmar'
 import { FilaMovimiento } from '../components/FilaMovimiento'
@@ -19,14 +20,19 @@ export function Movimientos() {
   const [tipo, setTipo] = useState<FiltroTipo>('Todos')
   const [categoriaId, setCategoriaId] = useState('')
   const [pagina, setPagina] = useState(1)
+  // La cuenta va en la URL (?cuenta=) para poder llegar desde la página de cuentas ya filtrado.
+  const [params, setParams] = useSearchParams()
+  const cuentaId = params.get('cuenta') ?? ''
 
   const { desde, hasta } = rangoDelMes(mes)
   const { data: categorias = [] } = useCategorias()
+  const { data: cuentas = [] } = useCuentas()
   const { data, isLoading, isError, error, isPlaceholderData } = useMovimientos({
     desde,
     hasta,
     tipo: tipo === 'Todos' ? undefined : tipo,
     categoriaId: categoriaId || undefined,
+    cuentaId: cuentaId || undefined,
     pagina,
     tamanio: TAMANIO_PAGINA,
   })
@@ -46,6 +52,18 @@ export function Movimientos() {
   const cambiarTipo = (nuevo: FiltroTipo) => {
     setTipo(nuevo)
     setCategoriaId('')
+    setPagina(1)
+  }
+  const cambiarCuenta = (nueva: string) => {
+    setParams(
+      (anteriores) => {
+        const siguientes = new URLSearchParams(anteriores)
+        if (nueva) siguientes.set('cuenta', nueva)
+        else siguientes.delete('cuenta')
+        return siguientes
+      },
+      { replace: true },
+    )
     setPagina(1)
   }
 
@@ -88,6 +106,19 @@ export function Movimientos() {
         >
           <option value="">Todas las categorías</option>
           {categoriasFiltro.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.nombre}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label="Filtrar por cuenta"
+          value={cuentaId}
+          onChange={(e) => cambiarCuenta(e.target.value)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+        >
+          <option value="">Todas las cuentas</option>
+          {cuentas.map((c) => (
             <option key={c.id} value={c.id}>
               {c.nombre}
             </option>
@@ -146,6 +177,7 @@ export function Movimientos() {
       <MovimientoFormulario
         abierto={editando.abierto}
         movimiento={editando.movimiento}
+        cuentaInicial={cuentaId || undefined}
         onCerrar={() => setEditando({ abierto: false, movimiento: null })}
       />
 

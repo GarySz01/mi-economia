@@ -60,6 +60,44 @@ namespace MiEconomia.Api.Data.Migrations
                     b.ToTable("Categorias");
                 });
 
+            modelBuilder.Entity("MiEconomia.Api.Domain.Cuenta", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Color")
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal>("SaldoInicial")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UsuarioId", "Nombre")
+                        .IsUnique();
+
+                    b.ToTable("Cuentas");
+                });
+
             modelBuilder.Entity("MiEconomia.Api.Domain.Movimiento", b =>
                 {
                     b.Property<Guid>("Id")
@@ -71,6 +109,9 @@ namespace MiEconomia.Api.Data.Migrations
 
                     b.Property<DateTimeOffset>("CreadoEn")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CuentaId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateOnly>("Fecha")
                         .HasColumnType("date");
@@ -90,11 +131,58 @@ namespace MiEconomia.Api.Data.Migrations
 
                     b.HasIndex("CategoriaId");
 
+                    b.HasIndex("CuentaId");
+
                     b.HasIndex("UsuarioId", "Fecha");
 
                     b.ToTable("Movimientos", t =>
                         {
                             t.HasCheckConstraint("CK_Movimientos_Monto_Positivo", "\"Monto\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("MiEconomia.Api.Domain.Transferencia", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CuentaDestinoId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CuentaOrigenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("Fecha")
+                        .HasColumnType("date");
+
+                    b.Property<decimal>("Monto")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Nota")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CuentaDestinoId");
+
+                    b.HasIndex("CuentaOrigenId");
+
+                    b.HasIndex("UsuarioId", "Fecha");
+
+                    b.ToTable("Transferencias", t =>
+                        {
+                            t.HasCheckConstraint("CK_Transferencias_Cuentas_Distintas", "\"CuentaOrigenId\" <> \"CuentaDestinoId\"");
+
+                            t.HasCheckConstraint("CK_Transferencias_Monto_Positivo", "\"Monto\" > 0");
                         });
                 });
 
@@ -312,11 +400,28 @@ namespace MiEconomia.Api.Data.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("MiEconomia.Api.Domain.Cuenta", b =>
+                {
+                    b.HasOne("MiEconomia.Api.Domain.Usuario", "Usuario")
+                        .WithMany("Cuentas")
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("MiEconomia.Api.Domain.Movimiento", b =>
                 {
                     b.HasOne("MiEconomia.Api.Domain.Categoria", "Categoria")
                         .WithMany("Movimientos")
                         .HasForeignKey("CategoriaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MiEconomia.Api.Domain.Cuenta", "Cuenta")
+                        .WithMany("Movimientos")
+                        .HasForeignKey("CuentaId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -327,6 +432,35 @@ namespace MiEconomia.Api.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Categoria");
+
+                    b.Navigation("Cuenta");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("MiEconomia.Api.Domain.Transferencia", b =>
+                {
+                    b.HasOne("MiEconomia.Api.Domain.Cuenta", "CuentaDestino")
+                        .WithMany()
+                        .HasForeignKey("CuentaDestinoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MiEconomia.Api.Domain.Cuenta", "CuentaOrigen")
+                        .WithMany()
+                        .HasForeignKey("CuentaOrigenId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("MiEconomia.Api.Domain.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CuentaDestino");
+
+                    b.Navigation("CuentaOrigen");
 
                     b.Navigation("Usuario");
                 });
@@ -387,9 +521,16 @@ namespace MiEconomia.Api.Data.Migrations
                     b.Navigation("Movimientos");
                 });
 
+            modelBuilder.Entity("MiEconomia.Api.Domain.Cuenta", b =>
+                {
+                    b.Navigation("Movimientos");
+                });
+
             modelBuilder.Entity("MiEconomia.Api.Domain.Usuario", b =>
                 {
                     b.Navigation("Categorias");
+
+                    b.Navigation("Cuentas");
 
                     b.Navigation("Movimientos");
                 });

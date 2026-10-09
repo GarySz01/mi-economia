@@ -127,4 +127,33 @@ public class ResumenTests(ApiFactory api)
         var problema = await respuesta.LeerProblemaAsync(HttpStatusCode.BadRequest);
         Assert.Equal(["La cantidad de meses debe estar entre 1 y 36."], problema.De("Meses"));
     }
+
+    [Fact]
+    public async Task Las_transferencias_no_cuentan_y_se_puede_filtrar_por_cuenta()
+    {
+        var sesion = await api.NuevoUsuarioAsync();
+        var sueldo = await sesion.CrearCategoriaAsync("Sueldo X", TipoMovimiento.Ingreso);
+        var comida = await sesion.CrearCategoriaAsync("Comida", TipoMovimiento.Egreso);
+        var banco = await sesion.CrearCuentaAsync("Banco");
+        await sesion.CrearMovimientoAsync(sueldo.Id, 1000, "2026-10-01", cuentaId: banco.Id);
+        await sesion.CrearMovimientoAsync(comida.Id, 300, "2026-10-02", cuentaId: banco.Id);
+        await sesion.CrearMovimientoAsync(comida.Id, 50, "2026-10-03");
+        await sesion.CrearTransferenciaAsync(banco.Id, sesion.CuentaId, 200, "2026-10-04");
+
+        async Task<ResumenResponse> Resumen(string filtros = "") =>
+            await (await sesion.Cliente.GetAsync($"/api/resumen?desde=2026-10-01&hasta=2026-10-31{filtros}"))
+                .LeerAsync<ResumenResponse>();
+        async Task<TotalMensual> Octubre(string filtros = "") =>
+            Assert.Single(await (await sesion.Cliente.GetAsync($"/api/resumen/mensual?meses=1&hasta=2026-10-01{filtros}"))
+                .LeerAsync<List<TotalMensual>>());
+
+        var todo = await Resumen();
+        Assert.Equal((1000m, 350m, 3), (todo.TotalIngresos, todo.TotalEgresos, todo.CantidadMovimientos));
+
+        var soloBanco = await Resumen($"&cuentaId={banco.Id}");
+        Assert.Equal((1000m, 300m, 2), (soloBanco.TotalIngresos, soloBanco.TotalEgresos, soloBanco.CantidadMovimientos));
+
+        Assert.Equal(350m, (await Octubre()).Egresos);
+        Assert.Equal(50m, (await Octubre($"&cuentaId={sesion.CuentaId}")).Egresos);
+    }
 }

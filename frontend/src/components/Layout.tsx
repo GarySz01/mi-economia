@@ -1,10 +1,11 @@
-import { ArrowLeftRight, LayoutDashboard, LogOut, Tags } from 'lucide-react'
+import { ArrowLeftRight, LayoutDashboard, LogOut, Tags, Wallet } from 'lucide-react'
 import { NavLink, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../auth/contexto'
 
 const enlaces = [
   { a: '/', texto: 'Panel', Icono: LayoutDashboard },
   { a: '/movimientos', texto: 'Movimientos', Icono: ArrowLeftRight },
+  { a: '/cuentas', texto: 'Cuentas', Icono: Wallet },
   { a: '/categorias', texto: 'Categorías', Icono: Tags },
 ]
 

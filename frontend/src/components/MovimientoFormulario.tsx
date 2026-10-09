@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { ApiError } from '../api/cliente'
-import { useCategorias, useGuardarMovimiento } from '../api/consultas'
+import { useCategorias, useCuentas, useGuardarMovimiento } from '../api/consultas'
 import type { Movimiento, TipoMovimiento } from '../api/tipos'
-import { hoyIso, parsearMonto } from '../lib/formato'
+import { hoyIso, montoParaEditar, parsearMonto } from '../lib/formato'
 import { Modal } from './Modal'
 import { Alerta, Boton, Campo, Segmentado, Select } from './ui'
 
@@ -12,29 +12,43 @@ interface Props {
   onCerrar: () => void
   /** Si se pasa, se edita ese movimiento; si no, se crea uno nuevo. */
   movimiento?: Movimiento | null
+  /** Cuenta elegida de entrada al crear (por ejemplo, la del filtro de la página). Si no, la primera. */
+  cuentaInicial?: string
 }
 
-export function MovimientoFormulario({ abierto, onCerrar, movimiento }: Props) {
+export function MovimientoFormulario({ abierto, onCerrar, movimiento, cuentaInicial }: Props) {
   return (
     <Modal titulo={movimiento ? 'Editar movimiento' : 'Nuevo movimiento'} abierto={abierto} onCerrar={onCerrar}>
       {/* El formulario se monta de nuevo cada vez que se abre, así arranca limpio. */}
-      <Formulario movimiento={movimiento ?? null} onListo={onCerrar} />
+      <Formulario movimiento={movimiento ?? null} cuentaInicial={cuentaInicial} onListo={onCerrar} />
     </Modal>
   )
 }
 
-function Formulario({ movimiento, onListo }: { movimiento: Movimiento | null; onListo: () => void }) {
+function Formulario({
+  movimiento,
+  cuentaInicial,
+  onListo,
+}: {
+  movimiento: Movimiento | null
+  cuentaInicial?: string
+  onListo: () => void
+}) {
   const { data: categorias = [], isLoading } = useCategorias()
+  const { data: cuentas = [], isLoading: cargandoCuentas } = useCuentas()
   const guardar = useGuardarMovimiento()
 
   const [tipo, setTipo] = useState<TipoMovimiento>(movimiento?.categoria.tipo ?? 'Egreso')
   const [categoriaId, setCategoriaId] = useState(movimiento?.categoria.id ?? '')
-  const [monto, setMonto] = useState(movimiento ? String(movimiento.monto).replace('.', ',') : '')
+  // Vacío = todavía no se eligió: se usa la cuenta inicial o la primera (las cuentas pueden llegar después).
+  const [cuentaElegida, setCuentaElegida] = useState(movimiento?.cuenta.id ?? cuentaInicial ?? '')
+  const [monto, setMonto] = useState(movimiento ? montoParaEditar(movimiento.monto) : '')
   const [fecha, setFecha] = useState(movimiento?.fecha ?? hoyIso())
   const [nota, setNota] = useState(movimiento?.nota ?? '')
   const [error, setError] = useState<ApiError | null>(null)
 
   const disponibles = categorias.filter((c) => c.tipo === tipo)
+  const cuentaId = cuentaElegida || (cuentas[0]?.id ?? '')
 
   const cambiarTipo = (nuevo: TipoMovimiento) => {
     setTipo(nuevo)
@@ -54,7 +68,7 @@ function Formulario({ movimiento, onListo }: { movimiento: Movimiento | null; on
     try {
       await guardar.mutateAsync({
         id: movimiento?.id,
-        datos: { categoriaId, monto: valor, fecha, nota: nota.trim() || null },
+        datos: { categoriaId, cuentaId, monto: valor, fecha, nota: nota.trim() || null },
       })
       onListo()
     } catch (err) {
@@ -108,6 +122,30 @@ function Formulario({ movimiento, onListo }: { movimiento: Movimiento | null; on
         <p className="-mt-2 text-xs text-slate-500">
           No tienes categorías de {tipo === 'Egreso' ? 'gastos' : 'ingresos'}.{' '}
           <Link to="/categorias" className="font-medium text-emerald-700 hover:underline">
+            Crear una
+          </Link>
+        </p>
+      )}
+
+      <Select
+        etiqueta={tipo === 'Egreso' ? 'Pagado con' : 'Ingresó en'}
+        value={cuentaId}
+        onChange={(e) => setCuentaElegida(e.target.value)}
+        error={error?.campo('cuentaId')}
+        disabled={cargandoCuentas}
+        required
+      >
+        <option value="">{cargandoCuentas ? 'Cargando…' : 'Elige una cuenta'}</option>
+        {cuentas.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.nombre}
+          </option>
+        ))}
+      </Select>
+      {!cargandoCuentas && cuentas.length === 0 && (
+        <p className="-mt-2 text-xs text-slate-500">
+          No tienes cuentas.{' '}
+          <Link to="/cuentas" className="font-medium text-emerald-700 hover:underline">
             Crear una
           </Link>
         </p>
