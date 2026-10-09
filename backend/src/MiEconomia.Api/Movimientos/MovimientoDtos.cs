@@ -9,7 +9,8 @@ public record GuardarMovimientoRequest(
     Guid? CategoriaId,
 
     [Required(ErrorMessage = "El monto es obligatorio.")]
-    [Range(typeof(decimal), "0.01", "9999999999999999.99", ErrorMessage = "El monto debe ser mayor a 0.")]
+    [Range(typeof(decimal), "0.01", "9999999999999999.99",
+        ParseLimitsInInvariantCulture = true, ConvertValueInInvariantCulture = true, ErrorMessage = "El monto debe ser mayor a 0.")]
     decimal? Monto,
 
     [Required(ErrorMessage = "La fecha es obligatoria.")]
