@@ -2,20 +2,29 @@
 // Las fechas viajan como texto "yyyy-MM-dd" (DateOnly en la API) y se manejan
 // siempre en hora local, sin pasar por UTC, para que no se corran de día.
 
+import type { Moneda, SaldoPorMoneda } from '../api/tipos'
+import { MONEDA_POR_DEFECTO, simboloMoneda } from './monedas'
+
 const formatoMonto = new Intl.NumberFormat('es', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
   useGrouping: 'always',
 })
 
-export function formatMonto(valor: number) {
+/** 1500.5 -> "$ 1.500,50"; con moneda USD -> "US$ 1.500,50". */
+export function formatMonto(valor: number, moneda: Moneda = MONEDA_POR_DEFECTO) {
   const texto = formatoMonto.format(Math.abs(valor))
-  return `${valor < 0 ? '-' : ''}$ ${texto}`
+  return `${valor < 0 ? '-' : ''}${simboloMoneda(moneda)} ${texto}`
 }
 
 /** Versión corta para ejes de gráficos: 1.500.000 -> "$ 1,5 M". */
-export function formatMontoCorto(valor: number) {
-  return `$ ${new Intl.NumberFormat('es', { notation: 'compact', maximumFractionDigits: 1 }).format(valor)}`
+export function formatMontoCorto(valor: number, moneda: Moneda = MONEDA_POR_DEFECTO) {
+  return `${simboloMoneda(moneda)} ${new Intl.NumberFormat('es', { notation: 'compact', maximumFractionDigits: 1 }).format(valor)}`
+}
+
+/** Varios saldos de distinta moneda en un texto: "$ 1.000,00 · US$ 50,00". Sin saldos, "$ 0,00". */
+export function formatSaldos(saldos: SaldoPorMoneda[]) {
+  return saldos.length === 0 ? formatMonto(0) : saldos.map((s) => formatMonto(s.saldo, s.moneda)).join(' · ')
 }
 
 const dos = (n: number) => String(n).padStart(2, '0')

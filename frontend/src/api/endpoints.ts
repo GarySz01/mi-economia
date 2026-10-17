@@ -1,16 +1,20 @@
 import { api, query } from './cliente'
 import type {
+  ActualizarCuentaInput,
   AuthResponse,
   CategoriaConSubcategorias,
   CategoriaInput,
+  CrearCuentaInput,
   Cuenta,
-  CuentaInput,
+  Moneda,
   Movimiento,
   MovimientoInput,
   MovimientosFiltro,
   Pagina,
   Resumen,
   Subcategoria,
+  Subcuenta,
+  SubcuentaInput,
   TipoMovimiento,
   TotalMensual,
   Transferencia,
@@ -55,8 +59,9 @@ export const movimientosApi = {
 
 export const cuentasApi = {
   listar: () => api<Cuenta[]>('/cuentas'),
-  crear: (datos: CuentaInput) => api<Cuenta>('/cuentas', { method: 'POST', body: datos }),
-  actualizar: (id: string, datos: CuentaInput) => api<Cuenta>(`/cuentas/${id}`, { method: 'PUT', body: datos }),
+  crear: (datos: CrearCuentaInput) => api<Cuenta>('/cuentas', { method: 'POST', body: datos }),
+  actualizar: (id: string, datos: ActualizarCuentaInput) =>
+    api<Cuenta>(`/cuentas/${id}`, { method: 'PUT', body: datos }),
   eliminar: (id: string) => api<void>(`/cuentas/${id}`, { method: 'DELETE' }),
 }
 
@@ -69,6 +74,16 @@ export const transferenciasApi = {
 }
 
 export const resumenApi = {
-  obtener: (desde: string, hasta: string) => api<Resumen>(`/resumen${query({ desde, hasta })}`),
-  mensual: (hasta: string, meses = 6) => api<TotalMensual[]>(`/resumen/mensual${query({ hasta, meses })}`),
+  obtener: (desde: string, hasta: string, moneda: Moneda) => api<Resumen>(`/resumen${query({ desde, hasta, moneda })}`),
+  mensual: (hasta: string, moneda: Moneda, meses = 6) =>
+    api<TotalMensual[]>(`/resumen/mensual${query({ hasta, moneda, meses })}`),
+}
+
+// Se listan dentro de cada cuenta (cuentasApi.listar), con su saldo.
+export const subcuentasApi = {
+  crear: (cuentaId: string, datos: SubcuentaInput) =>
+    api<Subcuenta>(`/cuentas/${cuentaId}/subcuentas`, { method: 'POST', body: datos }),
+  actualizar: (cuentaId: string, id: string, datos: SubcuentaInput) =>
+    api<Subcuenta>(`/cuentas/${cuentaId}/subcuentas/${id}`, { method: 'PUT', body: datos }),
+  eliminar: (cuentaId: string, id: string) => api<void>(`/cuentas/${cuentaId}/subcuentas/${id}`, { method: 'DELETE' }),
 }

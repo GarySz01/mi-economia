@@ -3,25 +3,32 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useCuentas, useMovimientos, useResumen, useResumenMensual } from '../api/consultas'
-import type { Movimiento, TotalMensual, TotalPorCategoria } from '../api/tipos'
+import type { Moneda, Movimiento, TotalMensual, TotalPorCategoria } from '../api/tipos'
 import { useAuth } from '../auth/contexto'
 import { FilaMovimiento } from '../components/FilaMovimiento'
 import { MovimientoFormulario } from '../components/MovimientoFormulario'
 import { SelectorMes } from '../components/SelectorMes'
 import { useMesSeleccionado } from '../hooks/useMesSeleccionado'
-import { Alerta, Boton, Cargando, Tarjeta, Vacio } from '../components/ui'
+import { Alerta, Boton, Cargando, Segmentado, Tarjeta, Vacio } from '../components/ui'
 import { formatMonto, formatMontoCorto, nombreMesCorto, rangoDelMes } from '../lib/formato'
 import { IconoCategoria } from '../components/IconoCategoria'
-import { IconoCuenta } from '../components/IconoCuenta'
+import { DistribucionDinero } from '../components/DistribucionDinero'
 import { COLOR_POR_DEFECTO } from '../lib/iconos'
+import { MONEDA_POR_DEFECTO, simboloMoneda, sumarPorMoneda } from '../lib/monedas'
 
 export function Panel() {
   const { usuario } = useAuth()
   const [mes, setMes] = useMesSeleccionado()
   const { desde, hasta } = rangoDelMes(mes)
 
-  const resumen = useResumen(desde, hasta)
-  const mensual = useResumenMensual(hasta)
+  // El resumen es de una moneda: si hay varias en uso, se elige cuál ver.
+  const { data: cuentas = [] } = useCuentas()
+  const monedas = sumarPorMoneda(cuentas.flatMap((c) => c.subcuentas)).map((s) => s.moneda)
+  const [monedaElegida, setMoneda] = useState<Moneda | null>(null)
+  const moneda = monedaElegida && monedas.includes(monedaElegida) ? monedaElegida : (monedas[0] ?? MONEDA_POR_DEFECTO)
+
+  const resumen = useResumen(desde, hasta, moneda)
+  const mensual = useResumenMensual(hasta, moneda)
   const ultimos = useMovimientos({ desde, hasta, tamanio: 5 })
 
   const [formulario, setFormulario] = useState<{ abierto: boolean; movimiento: Movimiento | null }>({
@@ -38,6 +45,14 @@ export function Panel() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-slate-900">Hola, {usuario?.nombre.split(' ')[0]}</h1>
         <div className="flex flex-wrap items-center gap-2">
+          {monedas.length > 1 && (
+            <Segmentado
+              etiqueta="Moneda del resumen"
+              valor={moneda}
+              onChange={setMoneda}
+              opciones={monedas.map((m) => ({ valor: m, texto: simboloMoneda(m) }))}
+            />
+          )}
           <SelectorMes mes={mes} onChange={setMes} />
           <Boton onClick={() => setFormulario({ abierto: true, movimiento: null })}>
             <Plus className="size-4" aria-hidden />
@@ -49,17 +64,18 @@ export function Panel() {
       {resumen.isError && <Alerta>{resumen.error.message}</Alerta>}
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Indicador titulo="Ingresos" valor={datos?.totalIngresos} Icono={ArrowUpCircle} color="text-emerald-600" />
-        <Indicador titulo="Gastos" valor={datos?.totalEgresos} Icono={ArrowDownCircle} color="text-rose-600" />
+        <Indicador titulo="Ingresos" valor={datos?.totalIngresos} moneda={moneda} Icono={ArrowUpCircle} color="text-emerald-600" />
+        <Indicador titulo="Gastos" valor={datos?.totalEgresos} moneda={moneda} Icono={ArrowDownCircle} color="text-rose-600" />
         <Indicador
           titulo="Balance"
           valor={datos?.balance}
+          moneda={moneda}
           Icono={Scale}
           color={(datos?.balance ?? 0) < 0 ? 'text-rose-600' : 'text-slate-900'}
         />
       </div>
 
-      <SaldosCuentas />
+      <DistribucionDinero />
 
       {resumen.isLoading ? (
         <Cargando />
@@ -80,8 +96,8 @@ export function Panel() {
               <Vacio titulo="Sin gastos este mes." />
             ) : (
               <>
-                <GraficoTorta datos={egresos} total={datos?.totalEgresos ?? 0} />
-                <ListaCategorias datos={egresos} />
+                <GraficoTorta datos={egresos} total={datos?.totalEgresos ?? 0} moneda={moneda} />
+                <ListaCategorias datos={egresos} moneda={moneda} />
               </>
             )}
           </Tarjeta>
@@ -89,7 +105,7 @@ export function Panel() {
           <div className="space-y-4">
             <Tarjeta>
               <h2 className="mb-2 font-semibold text-slate-900">Ingresos por categoría</h2>
-              {ingresos.length === 0 ? <Vacio titulo="Sin ingresos este mes." /> : <ListaCategorias datos={ingresos} />}
+              {ingresos.length === 0 ? <Vacio titulo="Sin ingresos este mes." /> : <ListaCategorias datos={ingresos} moneda={moneda} />}
             </Tarjeta>
 
             <Tarjeta>
@@ -111,7 +127,7 @@ export function Panel() {
 
       <Tarjeta>
         <h2 className="mb-4 font-semibold text-slate-900">Últimos 6 meses</h2>
-        {mensual.data ? <GraficoMensual datos={mensual.data} /> : <Cargando />}
+        {mensual.data ? <GraficoMensual datos={mensual.data} moneda={moneda} /> : <Cargando />}
       </Tarjeta>
 
       <MovimientoFormulario
@@ -123,48 +139,16 @@ export function Panel() {
   )
 }
 
-/** Saldo actual de cada cuenta (no depende del mes elegido). */
-function SaldosCuentas() {
-  const { data: cuentas } = useCuentas()
-  if (!cuentas?.length) return null
-  const total = cuentas.reduce((suma, c) => suma + c.saldo, 0)
-
-  return (
-    <Tarjeta>
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-semibold text-slate-900">
-          Tus cuentas{' '}
-          <span className={`ml-1 font-normal tabular-nums ${total < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-            {formatMonto(total)}
-          </span>
-        </h2>
-        <Link to="/cuentas" className="text-sm font-medium text-emerald-700 hover:underline">
-          Ver cuentas
-        </Link>
-      </div>
-      <ul className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-        {cuentas.map((c) => (
-          <li key={c.id} className="flex items-center gap-3">
-            <IconoCuenta cuenta={c} tamanio="sm" />
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-700">{c.nombre}</span>
-            <span className={`shrink-0 text-sm tabular-nums ${c.saldo < 0 ? 'text-rose-600' : 'text-slate-900'}`}>
-              {formatMonto(c.saldo)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </Tarjeta>
-  )
-}
-
 function Indicador({
   titulo,
   valor,
+  moneda,
   Icono,
   color,
 }: {
   titulo: string
   valor: number | undefined
+  moneda: Moneda
   Icono: typeof Scale
   color: string
 }) {
@@ -174,14 +158,14 @@ function Indicador({
       <div className="min-w-0">
         <p className="text-sm text-slate-500">{titulo}</p>
         <p className={`truncate text-xl font-semibold tabular-nums ${color}`}>
-          {valor === undefined ? '—' : formatMonto(valor)}
+          {valor === undefined ? '—' : formatMonto(valor, moneda)}
         </p>
       </div>
     </Tarjeta>
   )
 }
 
-function GraficoTorta({ datos, total }: { datos: TotalPorCategoria[]; total: number }) {
+function GraficoTorta({ datos, total, moneda }: { datos: TotalPorCategoria[]; total: number; moneda: Moneda }) {
   return (
     <div className="relative h-52">
       <ResponsiveContainer>
@@ -200,18 +184,18 @@ function GraficoTorta({ datos, total }: { datos: TotalPorCategoria[]; total: num
               <Cell key={d.categoria.id} fill={d.categoria.color ?? COLOR_POR_DEFECTO} />
             ))}
           </Pie>
-          <Tooltip formatter={(valor) => formatMonto(Number(valor))} />
+          <Tooltip formatter={(valor) => formatMonto(Number(valor), moneda)} />
         </PieChart>
       </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-xs text-slate-500">Total</span>
-        <span className="text-base font-semibold tabular-nums text-slate-900">{formatMonto(total)}</span>
+        <span className="text-base font-semibold tabular-nums text-slate-900">{formatMonto(total, moneda)}</span>
       </div>
     </div>
   )
 }
 
-function ListaCategorias({ datos }: { datos: TotalPorCategoria[] }) {
+function ListaCategorias({ datos, moneda }: { datos: TotalPorCategoria[]; moneda: Moneda }) {
   return (
     <ul className="mt-2 space-y-3">
       {datos.map((d) => (
@@ -220,7 +204,7 @@ function ListaCategorias({ datos }: { datos: TotalPorCategoria[] }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-baseline justify-between gap-2 text-sm">
               <span className="truncate font-medium text-slate-700">{d.categoria.nombre}</span>
-              <span className="shrink-0 tabular-nums text-slate-900">{formatMonto(d.total)}</span>
+              <span className="shrink-0 tabular-nums text-slate-900">{formatMonto(d.total, moneda)}</span>
             </div>
             <div className="mt-1 flex items-center gap-2">
               <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
@@ -240,7 +224,7 @@ function ListaCategorias({ datos }: { datos: TotalPorCategoria[] }) {
   )
 }
 
-function GraficoMensual({ datos }: { datos: TotalMensual[] }) {
+function GraficoMensual({ datos, moneda }: { datos: TotalMensual[]; moneda: Moneda }) {
   const filas = datos.map((d) => ({ ...d, nombre: nombreMesCorto(d.anio, d.mes) }))
   return (
     <div className="h-64">
@@ -249,13 +233,13 @@ function GraficoMensual({ datos }: { datos: TotalMensual[] }) {
           <CartesianGrid vertical={false} stroke="#e2e8f0" />
           <XAxis dataKey="nombre" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
           <YAxis
-            tickFormatter={formatMontoCorto}
+            tickFormatter={(valor: number) => formatMontoCorto(valor, moneda)}
             tickLine={false}
             axisLine={false}
             width={70}
             tick={{ fill: '#64748b', fontSize: 12 }}
           />
-          <Tooltip formatter={(valor) => formatMonto(Number(valor))} cursor={{ fill: '#f1f5f9' }} />
+          <Tooltip formatter={(valor) => formatMonto(Number(valor), moneda)} cursor={{ fill: '#f1f5f9' }} />
           <Bar dataKey="ingresos" name="Ingresos" fill="#059669" radius={[4, 4, 0, 0]} maxBarSize={32} />
           <Bar dataKey="egresos" name="Gastos" fill="#e11d48" radius={[4, 4, 0, 0]} maxBarSize={32} />
         </BarChart>

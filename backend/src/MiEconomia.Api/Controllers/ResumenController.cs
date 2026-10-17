@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using MiEconomia.Api.Auth;
 using MiEconomia.Api.Categorias;
+using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Data;
 using MiEconomia.Api.Domain;
 using MiEconomia.Api.Resumen;
@@ -18,18 +19,21 @@ public class ResumenController(AppDbContext db, TimeProvider tiempo) : Controlle
 
     private DateOnly Hoy => DateOnly.FromDateTime(tiempo.GetLocalNow().DateTime);
 
-    private IQueryable<Movimiento> MisMovimientos(Guid? cuentaId)
+    private IQueryable<Movimiento> MisMovimientos(Guid? cuentaId, Guid? subcuentaId, string moneda)
     {
-        var query = db.Movimientos.Where(m => m.UsuarioId == UsuarioId);
+        var query = db.Movimientos.Where(m => m.UsuarioId == UsuarioId && m.Subcuenta.Moneda == moneda);
+        if (subcuentaId is not null)
+            query = query.Where(m => m.SubcuentaId == subcuentaId);
         return cuentaId is null ? query : query.Where(m => m.CuentaId == cuentaId);
     }
 
-    /// <summary>Totales de ingresos, egresos y balance de un período, con el desglose por categoría.</summary>
+    /// <summary>Totales de ingresos, egresos y balance de un período en una moneda, con el desglose por categoría.</summary>
     [HttpGet]
     [ProducesResponseType<ResumenResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Obtener([FromQuery] ResumenFiltro filtro)
     {
+        var moneda = filtro.Moneda ?? Monedas.PorDefecto;
         var inicioMes = new DateOnly(Hoy.Year, Hoy.Month, 1);
         var desde = filtro.Desde ?? inicioMes;
         var hasta = filtro.Hasta ?? inicioMes.AddMonths(1).AddDays(-1);
@@ -40,7 +44,7 @@ public class ResumenController(AppDbContext db, TimeProvider tiempo) : Controlle
         }
 
         // La suma se hace en la base; solo vuelve una fila por categoría.
-        var totales = await MisMovimientos(filtro.CuentaId)
+        var totales = await MisMovimientos(filtro.CuentaId, filtro.SubcuentaId, moneda)
             .Where(m => m.Fecha >= desde && m.Fecha <= hasta)
             .GroupBy(m => m.CategoriaId)
             .Select(g => new { CategoriaId = g.Key, Total = g.Sum(m => m.Monto), Cantidad = g.Count() })
@@ -70,7 +74,7 @@ public class ResumenController(AppDbContext db, TimeProvider tiempo) : Controlle
             .ToList();
 
         return Ok(new ResumenResponse(
-            desde, hasta, ingresos, egresos, ingresos - egresos, totales.Sum(t => t.Cantidad), porCategoria));
+            desde, hasta, moneda, ingresos, egresos, ingresos - egresos, totales.Sum(t => t.Cantidad), porCategoria));
     }
 
     /// <summary>Ingresos, egresos y balance de cada mes, para el gráfico de evolución. Incluye los meses sin movimientos.</summary>
@@ -79,12 +83,13 @@ public class ResumenController(AppDbContext db, TimeProvider tiempo) : Controlle
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IReadOnlyList<TotalMensual>> Mensual([FromQuery] ResumenMensualFiltro filtro)
     {
+        var moneda = filtro.Moneda ?? Monedas.PorDefecto;
         var referencia = filtro.Hasta ?? Hoy;
         var ultimoMes = new DateOnly(referencia.Year, referencia.Month, 1);
         var primerMes = ultimoMes.AddMonths(-(filtro.Meses - 1));
         var hasta = ultimoMes.AddMonths(1).AddDays(-1);
 
-        var totales = await MisMovimientos(filtro.CuentaId)
+        var totales = await MisMovimientos(filtro.CuentaId, filtro.SubcuentaId, moneda)
             .Where(m => m.Fecha >= primerMes && m.Fecha <= hasta)
             .GroupBy(m => new { m.Fecha.Year, m.Fecha.Month, m.Categoria.Tipo })
             .Select(g => new { g.Key.Year, g.Key.Month, g.Key.Tipo, Total = g.Sum(m => m.Monto) })

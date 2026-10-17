@@ -12,6 +12,9 @@ public class Movimiento
     /// <summary>De dónde salió (egreso) o adónde entró (ingreso) el dinero.</summary>
     public Guid CuentaId { get; set; }
 
+    /// <summary>Subcuenta de <see cref="CuentaId"/> donde está el dinero; define la moneda del monto.</summary>
+    public Guid SubcuentaId { get; set; }
+
     /// <summary>Siempre positivo; si es ingreso o egreso lo define la categoría.</summary>
     public decimal Monto { get; set; }
     public DateOnly Fecha { get; set; }
@@ -22,4 +25,5 @@ public class Movimiento
     public Categoria Categoria { get; set; } = null!;
     public Subcategoria? Subcategoria { get; set; }
     public Cuenta Cuenta { get; set; } = null!;
+    public Subcuenta Subcuenta { get; set; } = null!;
 }

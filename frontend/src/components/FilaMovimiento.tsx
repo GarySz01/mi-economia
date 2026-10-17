@@ -1,4 +1,5 @@
 import { Pencil, Trash2 } from 'lucide-react'
+import { useCuentas } from '../api/consultas'
 import type { Movimiento } from '../api/tipos'
 import { formatFecha, formatMonto } from '../lib/formato'
 import { IconoCategoria } from './IconoCategoria'
@@ -13,9 +14,13 @@ interface Props {
 
 export function FilaMovimiento({ movimiento: m, onEditar, onEliminar, sinFecha }: Props) {
   const esIngreso = m.categoria.tipo === 'Ingreso'
+  // La subcuenta se muestra solo si la cuenta tiene varias (las cuentas ya están en caché).
+  const { data: cuentas } = useCuentas()
+  const variasSubcuentas = (cuentas?.find((c) => c.id === m.cuenta.id)?.subcuentas.length ?? 0) > 1
+  const nombreCuenta = variasSubcuentas ? `${m.cuenta.nombre} › ${m.subcuenta.nombre}` : m.cuenta.nombre
   const categoria = m.subcategoria ? `${m.categoria.nombre} › ${m.subcategoria.nombre}` : m.categoria.nombre
   // Si hay nota, el título es la nota y la categoría pasa al detalle.
-  const detalle = [m.nota ? categoria : null, m.cuenta.nombre, sinFecha ? null : formatFecha(m.fecha)]
+  const detalle = [m.nota ? categoria : null, nombreCuenta, sinFecha ? null : formatFecha(m.fecha)]
     .filter(Boolean)
     .join(' · ')
   return (
@@ -32,7 +37,7 @@ export function FilaMovimiento({ movimiento: m, onEditar, onEliminar, sinFecha }
         </span>
         <span className={`shrink-0 text-sm font-semibold tabular-nums ${esIngreso ? 'text-emerald-600' : 'text-slate-800'}`}>
           {esIngreso ? '+' : '-'}
-          {formatMonto(m.monto)}
+          {formatMonto(m.monto, m.subcuenta.moneda)}
         </span>
       </button>
       <div className="flex shrink-0 gap-0.5 sm:opacity-0 sm:transition sm:group-focus-within:opacity-100 sm:group-hover:opacity-100">

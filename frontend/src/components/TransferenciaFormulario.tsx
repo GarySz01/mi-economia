@@ -3,9 +3,12 @@ import { useState, type FormEvent } from 'react'
 import { ApiError } from '../api/cliente'
 import { useCuentas, useGuardarTransferencia } from '../api/consultas'
 import type { Transferencia } from '../api/tipos'
-import { formatMonto, hoyIso, montoParaEditar, parsearMonto } from '../lib/formato'
+import { subcuentaEfectiva } from '../lib/cuentas'
+import { hoyIso, montoParaEditar, parsearMonto } from '../lib/formato'
+import { simboloMoneda } from '../lib/monedas'
 import { Modal } from './Modal'
-import { Alerta, Boton, Campo, Select } from './ui'
+import { SelectorCuenta } from './SelectorCuenta'
+import { Alerta, Boton, Campo } from './ui'
 
 interface Props {
   abierto: boolean
@@ -16,7 +19,7 @@ interface Props {
 
 export function TransferenciaFormulario({ abierto, onCerrar, transferencia }: Props) {
   return (
-    <Modal titulo={transferencia ? 'Editar transferencia' : 'Transferir entre cuentas'} abierto={abierto} onCerrar={onCerrar}>
+    <Modal titulo={transferencia ? 'Editar transferencia' : 'Transferir'} abierto={abierto} onCerrar={onCerrar}>
       <Formulario transferencia={transferencia ?? null} onListo={onCerrar} />
     </Modal>
   )
@@ -26,27 +29,57 @@ function Formulario({ transferencia, onListo }: { transferencia: Transferencia |
   const { data: cuentas = [], isLoading } = useCuentas()
   const guardar = useGuardarTransferencia()
 
-  const [origenId, setOrigenId] = useState(transferencia?.origen.id ?? '')
-  const [destinoId, setDestinoId] = useState(transferencia?.destino.id ?? '')
+  const [origen, setOrigen] = useState({
+    cuentaId: transferencia?.origen.id ?? '',
+    subcuentaId: transferencia?.subcuentaOrigen.id ?? '',
+  })
+  const [destino, setDestino] = useState({
+    cuentaId: transferencia?.destino.id ?? '',
+    subcuentaId: transferencia?.subcuentaDestino.id ?? '',
+  })
   const [monto, setMonto] = useState(transferencia ? montoParaEditar(transferencia.monto) : '')
+  const [montoDestino, setMontoDestino] = useState(transferencia ? montoParaEditar(transferencia.montoDestino) : '')
   const [fecha, setFecha] = useState(transferencia?.fecha ?? hoyIso())
   const [nota, setNota] = useState(transferencia?.nota ?? '')
   const [error, setError] = useState<ApiError | null>(null)
+
+  const subOrigen = subcuentaEfectiva(cuentas.find((c) => c.id === origen.cuentaId), origen.subcuentaId)
+  const subDestino = subcuentaEfectiva(cuentas.find((c) => c.id === destino.cuentaId), destino.subcuentaId)
+  // Entre monedas distintas (por ejemplo, comprar dólares) hay que decir cuánto llega.
+  const monedasDistintas = !!subOrigen && !!subDestino && subOrigen.moneda !== subDestino.moneda
+  // Se puede transferir dentro de una misma cuenta si tiene más de una subcuenta.
+  const hayDosSubcuentas = cuentas.reduce((suma, c) => suma + c.subcuentas.length, 0) >= 2
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
 
     const valor = parsearMonto(monto)
-    if (Number.isNaN(valor)) {
-      setError(new ApiError(400, '', { monto: ['Escribe un monto válido, por ejemplo 1500 o 1.500,50.'] }))
+    const valorDestino = monedasDistintas ? parsearMonto(montoDestino) : null
+    if (Number.isNaN(valor) || Number.isNaN(valorDestino)) {
+      const mensaje = 'Escribe un monto válido, por ejemplo 1500 o 1.500,50.'
+      setError(
+        new ApiError(400, '', {
+          ...(Number.isNaN(valor) && { monto: [mensaje] }),
+          ...(Number.isNaN(valorDestino) && { montoDestino: [mensaje] }),
+        }),
+      )
       return
     }
 
     try {
       await guardar.mutateAsync({
         id: transferencia?.id,
-        datos: { cuentaOrigenId: origenId, cuentaDestinoId: destinoId, monto: valor, fecha, nota: nota.trim() || null },
+        datos: {
+          cuentaOrigenId: origen.cuentaId,
+          subcuentaOrigenId: subOrigen?.id ?? null,
+          cuentaDestinoId: destino.cuentaId,
+          subcuentaDestinoId: subDestino?.id ?? null,
+          monto: valor,
+          montoDestino: valorDestino,
+          fecha,
+          nota: nota.trim() || null,
+        },
       })
       onListo()
     } catch (err) {
@@ -56,59 +89,64 @@ function Formulario({ transferencia, onListo }: { transferencia: Transferencia |
 
   const errorGeneral = error && Object.keys(error.errores).length === 0 ? error.message : null
 
-  const opciones = (
-    <>
-      <option value="">{isLoading ? 'Cargando…' : 'Elige una cuenta'}</option>
-      {cuentas.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.nombre} ({formatMonto(c.saldo)})
-        </option>
-      ))}
-    </>
-  )
-
   return (
     <form onSubmit={enviar} className="space-y-4" noValidate>
-      {!isLoading && cuentas.length < 2 && (
+      {!isLoading && !hayDosSubcuentas && (
         <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          Para transferir necesitas al menos dos cuentas. Crea otra desde la página de cuentas.
+          Para transferir necesitas al menos dos cuentas, o una cuenta con dos subcuentas.
         </p>
       )}
 
       <div>
-        <Select
+        <SelectorCuenta
           etiqueta="Desde"
-          value={origenId}
-          onChange={(e) => setOrigenId(e.target.value)}
-          error={error?.campo('cuentaOrigenId')}
-          disabled={isLoading}
-          required
-        >
-          {opciones}
-        </Select>
+          cuentas={cuentas}
+          cargando={isLoading}
+          cuentaId={origen.cuentaId}
+          subcuentaId={origen.subcuentaId}
+          onChange={(cuentaId, subcuentaId) => setOrigen({ cuentaId, subcuentaId })}
+          errorCuenta={error?.campo('cuentaOrigenId')}
+          errorSubcuenta={error?.campo('subcuentaOrigenId')}
+          conSaldos
+        />
         <ArrowDown className="mx-auto mt-2 -mb-1 size-4 text-slate-400" aria-hidden />
-        <Select
+        <SelectorCuenta
           etiqueta="Hacia"
-          value={destinoId}
-          onChange={(e) => setDestinoId(e.target.value)}
-          error={error?.campo('cuentaDestinoId')}
-          disabled={isLoading}
-          required
-        >
-          {opciones}
-        </Select>
+          cuentas={cuentas}
+          cargando={isLoading}
+          cuentaId={destino.cuentaId}
+          subcuentaId={destino.subcuentaId}
+          onChange={(cuentaId, subcuentaId) => setDestino({ cuentaId, subcuentaId })}
+          errorCuenta={error?.campo('cuentaDestinoId')}
+          errorSubcuenta={error?.campo('subcuentaDestinoId')}
+          conSaldos
+        />
       </div>
 
-      <Campo
-        etiqueta="Monto"
-        inputMode="decimal"
-        autoComplete="off"
-        placeholder="0,00"
-        value={monto}
-        onChange={(e) => setMonto(e.target.value)}
-        error={error?.campo('monto')}
-        required
-      />
+      <div className={monedasDistintas ? 'grid grid-cols-2 gap-3' : ''}>
+        <Campo
+          etiqueta={subOrigen ? `${monedasDistintas ? 'Sale' : 'Monto'} (${simboloMoneda(subOrigen.moneda)})` : 'Monto'}
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="0,00"
+          value={monto}
+          onChange={(e) => setMonto(e.target.value)}
+          error={error?.campo('monto')}
+          required
+        />
+        {monedasDistintas && subDestino && (
+          <Campo
+            etiqueta={`Llega (${simboloMoneda(subDestino.moneda)})`}
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0,00"
+            value={montoDestino}
+            onChange={(e) => setMontoDestino(e.target.value)}
+            error={error?.campo('montoDestino')}
+            required
+          />
+        )}
+      </div>
 
       <Campo
         etiqueta="Fecha"
@@ -122,7 +160,7 @@ function Formulario({ transferencia, onListo }: { transferencia: Transferencia |
       <Campo
         etiqueta="Nota (opcional)"
         maxLength={250}
-        placeholder="Ej: retiro del cajero, pago de la tarjeta"
+        placeholder="Ej: retiro del cajero, compra de dólares, ahorro del mes"
         value={nota}
         onChange={(e) => setNota(e.target.value)}
         error={error?.campo('nota')}

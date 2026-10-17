@@ -50,34 +50,77 @@ export interface CuentaBasica {
   color: string | null
 }
 
-export interface Cuenta extends CuentaBasica {
+/** Código ISO 4217. Tiene que coincidir con Monedas.cs; los nombres y símbolos están en lib/monedas.ts. */
+export type Moneda = 'UYU' | 'USD' | 'EUR' | 'ARS' | 'BRL' | 'UYI'
+
+/** Datos de la subcuenta que vienen dentro de un movimiento o una transferencia (sin saldo). */
+export interface SubcuentaBasica {
+  id: string
+  nombre: string
+  moneda: Moneda
+}
+
+export interface Subcuenta extends SubcuentaBasica {
   /** Puede ser negativo (por ejemplo, la deuda de una tarjeta). */
   saldoInicial: number
   /** Saldo actual: inicial + ingresos − gastos ± transferencias. */
   saldo: number
 }
 
-export interface CuentaInput {
+export interface SubcuentaInput {
+  nombre: string
+  moneda: Moneda
+  saldoInicial: number
+}
+
+export interface SaldoPorMoneda {
+  moneda: Moneda
+  saldo: number
+}
+
+export interface Cuenta extends CuentaBasica {
+  /** Siempre al menos una, ordenadas por nombre. */
+  subcuentas: Subcuenta[]
+  /** Saldo total en cada moneda de sus subcuentas (los montos no se convierten). */
+  saldos: SaldoPorMoneda[]
+}
+
+/** Al crear, la moneda y el saldo inicial son los de la primera subcuenta ("Disponible"). */
+export interface CrearCuentaInput {
   nombre: string
   tipo: TipoCuenta
-  saldoInicial: number
   color: string | null
+  moneda: Moneda
+  saldoInicial: number
 }
+
+/** Al editar no se tocan los saldos: se editan en cada subcuenta. */
+export type ActualizarCuentaInput = Pick<CrearCuentaInput, 'nombre' | 'tipo' | 'color'>
 
 export interface Transferencia {
   id: string
+  /** Lo que sale del origen, en su moneda. */
   monto: number
+  /** Lo que llega al destino, en su moneda. Igual a monto si las monedas son iguales. */
+  montoDestino: number
   /** Formato yyyy-MM-dd */
   fecha: string
   nota: string | null
   origen: CuentaBasica
   destino: CuentaBasica
+  subcuentaOrigen: SubcuentaBasica
+  subcuentaDestino: SubcuentaBasica
 }
 
 export interface TransferenciaInput {
   cuentaOrigenId: string
+  /** Obligatoria solo si la cuenta tiene más de una subcuenta (igual para el destino). */
+  subcuentaOrigenId: string | null
   cuentaDestinoId: string
+  subcuentaDestinoId: string | null
   monto: number
+  /** Obligatorio solo si las subcuentas tienen distinta moneda. */
+  montoDestino: number | null
   fecha: string
   nota: string | null
 }
@@ -87,18 +130,21 @@ export interface TransferenciasFiltro {
   hasta?: string
   /** Transferencias en las que participa la cuenta, como origen o destino. */
   cuentaId?: string
+  subcuentaId?: string
   pagina?: number
   tamanio?: number
 }
 
 export interface Movimiento {
   id: string
+  /** En la moneda de la subcuenta. */
   monto: number
   /** Formato yyyy-MM-dd */
   fecha: string
   nota: string | null
   categoria: Categoria
   cuenta: CuentaBasica
+  subcuenta: SubcuentaBasica
   subcategoria: Subcategoria | null
 }
 
@@ -107,6 +153,8 @@ export interface MovimientoInput {
   /** Opcional; tiene que ser de la categoría elegida. */
   subcategoriaId: string | null
   cuentaId: string
+  /** Obligatoria solo si la cuenta tiene más de una subcuenta. */
+  subcuentaId: string | null
   monto: number
   fecha: string
   nota: string | null
@@ -118,6 +166,7 @@ export interface MovimientosFiltro {
   categoriaId?: string
   subcategoriaId?: string
   cuentaId?: string
+  subcuentaId?: string
   tipo?: TipoMovimiento
   pagina?: number
   tamanio?: number
@@ -137,9 +186,11 @@ export interface TotalPorCategoria {
   porcentaje: number
 }
 
+/** Siempre de una sola moneda. */
 export interface Resumen {
   desde: string
   hasta: string
+  moneda: Moneda
   totalIngresos: number
   totalEgresos: number
   balance: number

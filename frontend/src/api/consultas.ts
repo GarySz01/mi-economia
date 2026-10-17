@@ -1,10 +1,20 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { categoriasApi, cuentasApi, movimientosApi, resumenApi, subcategoriasApi, transferenciasApi } from './endpoints'
+import {
+  categoriasApi,
+  cuentasApi,
+  movimientosApi,
+  resumenApi,
+  subcategoriasApi,
+  subcuentasApi,
+  transferenciasApi,
+} from './endpoints'
 import type {
   CategoriaInput,
-  CuentaInput,
+  CrearCuentaInput,
+  Moneda,
   MovimientoInput,
   MovimientosFiltro,
+  SubcuentaInput,
   TransferenciaInput,
   TransferenciasFiltro,
 } from './tipos'
@@ -45,18 +55,18 @@ export function useTransferencias(filtro: TransferenciasFiltro) {
   })
 }
 
-export function useResumen(desde: string, hasta: string) {
+export function useResumen(desde: string, hasta: string, moneda: Moneda) {
   return useQuery({
-    queryKey: [...claves.resumen, 'periodo', desde, hasta],
-    queryFn: () => resumenApi.obtener(desde, hasta),
+    queryKey: [...claves.resumen, 'periodo', desde, hasta, moneda],
+    queryFn: () => resumenApi.obtener(desde, hasta, moneda),
     placeholderData: keepPreviousData,
   })
 }
 
-export function useResumenMensual(hasta: string, meses = 6) {
+export function useResumenMensual(hasta: string, moneda: Moneda, meses = 6) {
   return useQuery({
-    queryKey: [...claves.resumen, 'mensual', hasta, meses],
-    queryFn: () => resumenApi.mensual(hasta, meses),
+    queryKey: [...claves.resumen, 'mensual', hasta, moneda, meses],
+    queryFn: () => resumenApi.mensual(hasta, moneda, meses),
     placeholderData: keepPreviousData,
   })
 }
@@ -122,7 +132,7 @@ export function useEliminarSubcategoria() {
 export function useGuardarCuenta() {
   const invalidar = useInvalidar()
   return useMutation({
-    mutationFn: ({ id, datos }: { id?: string; datos: CuentaInput }) =>
+    mutationFn: ({ id, datos }: { id?: string; datos: CrearCuentaInput }) =>
       id ? cuentasApi.actualizar(id, datos) : cuentasApi.crear(datos),
     onSuccess: () => invalidar(claves.cuentas, claves.movimientos, claves.transferencias),
   })
@@ -150,5 +160,23 @@ export function useEliminarTransferencia() {
   return useMutation({
     mutationFn: (id: string) => transferenciasApi.eliminar(id),
     onSuccess: () => invalidar(claves.transferencias, claves.cuentas),
+  })
+}
+
+// Las subcuentas vienen dentro de las cuentas, y su nombre se muestra en movimientos y transferencias.
+export function useGuardarSubcuenta() {
+  const invalidar = useInvalidar()
+  return useMutation({
+    mutationFn: ({ cuentaId, id, datos }: { cuentaId: string; id?: string; datos: SubcuentaInput }) =>
+      id ? subcuentasApi.actualizar(cuentaId, id, datos) : subcuentasApi.crear(cuentaId, datos),
+    onSuccess: () => invalidar(claves.cuentas, claves.movimientos, claves.transferencias),
+  })
+}
+
+export function useEliminarSubcuenta() {
+  const invalidar = useInvalidar()
+  return useMutation({
+    mutationFn: ({ cuentaId, id }: { cuentaId: string; id: string }) => subcuentasApi.eliminar(cuentaId, id),
+    onSuccess: () => invalidar(claves.cuentas),
   })
 }

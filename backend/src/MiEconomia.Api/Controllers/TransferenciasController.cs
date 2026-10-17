@@ -5,6 +5,7 @@ using MiEconomia.Api.Auth;
 using MiEconomia.Api.Data;
 using MiEconomia.Api.Domain;
 using MiEconomia.Api.Movimientos;
+using MiEconomia.Api.Subcuentas;
 using MiEconomia.Api.Transferencias;
 
 namespace MiEconomia.Api.Controllers;
@@ -20,6 +21,8 @@ public class TransferenciasController(AppDbContext db) : ControllerBase
         db.Transferencias
             .Include(t => t.CuentaOrigen)
             .Include(t => t.CuentaDestino)
+            .Include(t => t.SubcuentaOrigen)
+            .Include(t => t.SubcuentaDestino)
             .Where(t => t.UsuarioId == UsuarioId);
 
     [HttpGet]
@@ -40,6 +43,8 @@ public class TransferenciasController(AppDbContext db) : ControllerBase
             query = query.Where(t => t.Fecha <= filtro.Hasta);
         if (filtro.CuentaId is not null)
             query = query.Where(t => t.CuentaOrigenId == filtro.CuentaId || t.CuentaDestinoId == filtro.CuentaId);
+        if (filtro.SubcuentaId is not null)
+            query = query.Where(t => t.SubcuentaOrigenId == filtro.SubcuentaId || t.SubcuentaDestinoId == filtro.SubcuentaId);
 
         var total = await query.CountAsync();
         var transferencias = await query
@@ -114,17 +119,58 @@ public class TransferenciasController(AppDbContext db) : ControllerBase
         // Las dos cuentas tienen que ser del usuario; si son de otro, se responde como si no existieran.
         var ids = new[] { request.CuentaOrigenId!.Value, request.CuentaDestinoId!.Value };
         var cuentas = await db.Cuentas
+            .Include(c => c.Subcuentas)
             .Where(c => ids.Contains(c.Id) && c.UsuarioId == UsuarioId)
             .ToDictionaryAsync(c => c.Id);
         var origen = cuentas.GetValueOrDefault(ids[0]);
         var destino = cuentas.GetValueOrDefault(ids[1]);
 
+        // Y cada subcuenta tiene que ser de su cuenta.
+        Subcuenta? subOrigen = null, subDestino = null;
         if (origen is null)
             ModelState.AddModelError(nameof(request.CuentaOrigenId), "La cuenta de origen no existe.");
+        else
+        {
+            (subOrigen, var error) = SubcuentaElegida.De(origen, request.SubcuentaOrigenId);
+            if (error is not null)
+                ModelState.AddModelError(nameof(request.SubcuentaOrigenId), error);
+        }
         if (destino is null)
             ModelState.AddModelError(nameof(request.CuentaDestinoId), "La cuenta de destino no existe.");
-        else if (destino.Id == origen?.Id)
-            ModelState.AddModelError(nameof(request.CuentaDestinoId), "La cuenta de destino tiene que ser distinta de la de origen.");
+        else
+        {
+            (subDestino, var error) = SubcuentaElegida.De(destino, request.SubcuentaDestinoId);
+            if (error is not null)
+                ModelState.AddModelError(nameof(request.SubcuentaDestinoId), error);
+        }
+
+        // Dentro de la misma cuenta se puede (del día a día al ahorro), pero no a la misma subcuenta.
+        if (subOrigen is not null && subOrigen.Id == subDestino?.Id)
+        {
+            if (request.SubcuentaDestinoId is null)
+                ModelState.AddModelError(nameof(request.CuentaDestinoId), "La cuenta de destino tiene que ser distinta de la de origen.");
+            else
+                ModelState.AddModelError(nameof(request.SubcuentaDestinoId), "La subcuenta de destino tiene que ser distinta de la de origen.");
+        }
+
+        // Entre monedas distintas (por ejemplo, comprar dólares) hay que indicar cuánto llega.
+        decimal? montoDestino = null;
+        if (subOrigen is not null && subDestino is not null && subOrigen.Id != subDestino.Id)
+        {
+            if (subOrigen.Moneda != subDestino.Moneda)
+            {
+                if (request.MontoDestino is null)
+                    ModelState.AddModelError(nameof(request.MontoDestino),
+                        $"Las subcuentas tienen distinta moneda: indica cuántos {subDestino.Moneda} llegan al destino.");
+                else if (decimal.Round(request.MontoDestino.Value, 2) != request.MontoDestino)
+                    ModelState.AddModelError(nameof(request.MontoDestino), "El monto que llega puede tener como máximo 2 decimales.");
+                else
+                    montoDestino = request.MontoDestino;
+            }
+            else if (request.MontoDestino is not null && request.MontoDestino != monto)
+                ModelState.AddModelError(nameof(request.MontoDestino),
+                    "Las dos subcuentas tienen la misma moneda: llega lo mismo que sale.");
+        }
 
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
@@ -133,7 +179,12 @@ public class TransferenciasController(AppDbContext db) : ControllerBase
         transferencia.CuentaOrigenId = origen!.Id;
         transferencia.CuentaDestino = destino!;
         transferencia.CuentaDestinoId = destino!.Id;
+        transferencia.SubcuentaOrigen = subOrigen!;
+        transferencia.SubcuentaOrigenId = subOrigen!.Id;
+        transferencia.SubcuentaDestino = subDestino!;
+        transferencia.SubcuentaDestinoId = subDestino!.Id;
         transferencia.Monto = monto;
+        transferencia.MontoDestino = montoDestino;
         transferencia.Fecha = request.Fecha!.Value;
         transferencia.Nota = string.IsNullOrWhiteSpace(request.Nota) ? null : request.Nota.Trim();
         return null;

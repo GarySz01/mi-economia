@@ -20,15 +20,15 @@ backend/
   MiEconomia.sln
   .config/dotnet-tools.json dotnet-ef como herramienta local
   src/MiEconomia.Api/
-    Domain/                 Entidades: Usuario (IdentityUser<Guid>), Categoria, Subcategoria, Movimiento, TipoMovimiento, Cuenta, TipoCuenta, Transferencia
+    Domain/                 Entidades: Usuario (IdentityUser<Guid>), Categoria, Subcategoria, Movimiento, TipoMovimiento, Cuenta, Subcuenta, TipoCuenta, Transferencia
     Data/                   AppDbContext y Migrations/
     Auth/                   JWT, DTOs de auth, mensajes de Identity en español, rate limit
-    Categorias/ Subcategorias/ Cuentas/ Movimientos/ Transferencias/ Resumen/   DTOs de cada módulo (+ CategoriasPorDefecto, CuentaPorDefecto, Saldos)
-    Controllers/            Auth, Categorias, Subcategorias, Cuentas, Movimientos, Transferencias, Resumen
+    Categorias/ Subcategorias/ Cuentas/ Subcuentas/ Movimientos/ Transferencias/ Resumen/   DTOs de cada módulo (+ CategoriasPorDefecto, CuentaPorDefecto, Saldos, Monedas, SubcuentaElegida)
+    Controllers/            Auth, Categorias, Subcategorias, Cuentas, Subcuentas, Movimientos, Transferencias, Resumen
     ProblemDetailsEs.cs     Traduce al español los errores que genera ASP.NET Core
   tests/MiEconomia.Api.Tests/
     Infraestructura/        ApiFactory (API en memoria + PostgreSQL en Docker con Testcontainers), helpers HTTP y de datos
-    *Tests.cs               Tests de integración por módulo: Auth, Categorias, Subcategorias, Cuentas, Movimientos, Transferencias, Aislamiento, Resumen
+    *Tests.cs               Tests de integración por módulo: Auth, Categorias, Subcategorias, Cuentas, Subcuentas, Movimientos, Transferencias, Aislamiento, Resumen
 frontend/
   vite.config.ts            Proxy /api -> http://localhost:5170 (en desarrollo no hace falta CORS)
   src/
@@ -36,7 +36,7 @@ frontend/
     auth/                   AuthProvider (sesión en localStorage) y useAuth
     components/             ui.tsx (Boton, Campo, Select, Tarjeta…), Modal, formularios, Layout
     hooks/                  useMesSeleccionado (mes en la URL: ?mes=2026-10)
-    lib/                    formato.ts (montos, fechas, meses), iconos.ts (íconos y colores elegibles), cuentas.ts (tipos de cuenta con su ícono)
+    lib/                    formato.ts (montos, fechas, meses), monedas.ts (monedas con su símbolo, sumas por moneda), iconos.ts (íconos y colores elegibles), cuentas.ts (tipos de cuenta con su ícono)
     pages/                  Acceso (login/registro), Panel, Movimientos, Cuentas (y transferencias), Categorias
 ```
 
@@ -74,11 +74,12 @@ Todo bajo `/api`, y todo pide `Authorization: Bearer <token>` salvo registro y l
 | `POST auth/registro`, `POST auth/login`, `GET auth/yo` | Devuelven `{ token, expiraEn, usuario }`. El token dura 60 min, todavía sin refresh token |
 | `categorias` (GET con `?tipo=`, GET/POST/PUT/DELETE `{id}`) | Cada categoría trae sus `subcategorias` (ordenadas por nombre). El tipo no se puede editar. Borrar con movimientos da 409; sin movimientos borra también sus subcategorías |
 | `categorias/{categoriaId}/subcategorias` (POST, PUT/DELETE `{id}`) | Solo nombre (no repetido dentro de la categoría). Borrar deja sus movimientos en la categoría sin subcategoría |
-| `movimientos` (GET con `desde, hasta, categoriaId, subcategoriaId, cuentaId, tipo, pagina, tamanio`) | Devuelve `{ items, total, pagina, tamanio }`. Cada movimiento pide `cuentaId`; `subcategoriaId` es opcional y tiene que ser de la categoría elegida |
-| `cuentas` (GET, GET/POST/PUT/DELETE `{id}`) | Devuelven el `saldo` actual (saldo inicial + ingresos − gastos ± transferencias), calculado en la base. El tipo se puede editar. Borrar con movimientos o transferencias da 409 |
-| `transferencias` (GET con `desde, hasta, cuentaId, pagina, tamanio`) | Origen y destino del mismo usuario y distintos entre sí. No son ingreso ni gasto |
+| `movimientos` (GET con `desde, hasta, categoriaId, subcategoriaId, cuentaId, subcuentaId, tipo, pagina, tamanio`) | Devuelve `{ items, total, pagina, tamanio }`. Cada movimiento pide `cuentaId`, y `subcuentaId` solo si la cuenta tiene más de una. `subcategoriaId` es opcional y tiene que ser de la categoría elegida |
+| `cuentas` (GET, GET/POST/PUT/DELETE `{id}`) | Cada cuenta trae sus `subcuentas` (con `moneda`, `saldoInicial` y `saldo` actual, calculado en la base) y `saldos` por moneda. Al crearla se crea la subcuenta "Disponible" con la `moneda` (UYU si no se indica) y el `saldoInicial`; al editarla solo cambian nombre, tipo y color. Borrar con movimientos o transferencias da 409 |
+| `cuentas/{cuentaId}/subcuentas` (POST, PUT/DELETE `{id}`) | Nombre, moneda y saldo inicial. La moneda no se puede cambiar si tiene movimientos o transferencias. No se puede borrar la única subcuenta ni una con uso (409) |
+| `transferencias` (GET con `desde, hasta, cuentaId, subcuentaId, pagina, tamanio`) | Entre subcuentas distintas del usuario (pueden ser de la misma cuenta). Si las monedas difieren se pide `montoDestino` (lo que llega). No son ingreso ni gasto |
 | `resumen?desde=&hasta=` | Totales y desglose por categoría; sin fechas usa el mes actual |
-| `resumen/mensual?meses=&hasta=` | Un elemento por mes, incluidos los meses vacíos. Los dos resúmenes aceptan `cuentaId` y no incluyen transferencias |
+| `resumen/mensual?meses=&hasta=` | Un elemento por mes, incluidos los meses vacíos. Los dos resúmenes son de una sola `moneda` (UYU por defecto), aceptan `cuentaId` y `subcuentaId` y no incluyen transferencias |
 
 Formato JSON: camelCase, enums como texto (`"Ingreso"`/`"Egreso"`), fechas `DateOnly` como `"2026-10-01"`, montos `decimal(18,2)`.
 
@@ -87,6 +88,7 @@ Formato JSON: camelCase, enums como texto (`"Ingreso"`/`"Egreso"`), fechas `Date
 - **Nombres del dominio en español** (`Categoria`, `Movimiento`, `Monto`, `Fecha`), sin tildes en los identificadores. Los términos técnicos van en inglés (`Controller`, `DbContext`, `Request`/`Response`).
 - **Aislamiento por usuario:** toda consulta filtra por `User.GetUsuarioId()`. Si algo es de otro usuario se responde 404, nunca 403, para no revelar que existe. Al recibir ids relacionados (por ejemplo `categoriaId`), verificar que también sean del usuario.
 - **Monto siempre positivo:** si es ingreso o egreso lo define la categoría, no el signo. La base tiene un check `Monto > 0`.
+- **Monedas:** cada subcuenta tiene su moneda (`Monedas.cs`, ISO 4217) y sus montos están en esa moneda. Nunca se suman ni se convierten montos de monedas distintas: los totales se dan por moneda.
 - **Errores:** validaciones con DataAnnotations y `ErrorMessage` en español; las reglas de negocio con `ModelState.AddModelError(campo, mensaje)` + `ValidationProblem(ModelState)`; los conflictos con `Problem(title: ..., statusCode: 409)`. Los mensajes se escriben para que el frontend los muestre tal cual.
 - **DTOs:** como `record` en la carpeta de su módulo, con un método estático `Desde(entidad)` para mapear. Las entidades nunca se devuelven directamente.
 - **Agregaciones** (sumas, conteos) en la base con `GroupBy` + `Select`, no trayendo todas las filas a memoria.

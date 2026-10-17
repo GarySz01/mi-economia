@@ -1,4 +1,5 @@
 using MiEconomia.Api.Domain;
+using MiEconomia.Api.Subcuentas;
 
 namespace MiEconomia.Api.Cuentas;
 
@@ -16,5 +17,6 @@ public static class CuentaPorDefecto
         Nombre = Nombre,
         Tipo = TipoCuenta.Efectivo,
         Color = "#16A34A",
+        Subcuentas = [new Subcuenta { Nombre = SubcuentaPrincipal.Nombre, Moneda = Monedas.PorDefecto }],
     };
 }

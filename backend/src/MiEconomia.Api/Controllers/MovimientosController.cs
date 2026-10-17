@@ -5,6 +5,7 @@ using MiEconomia.Api.Auth;
 using MiEconomia.Api.Data;
 using MiEconomia.Api.Domain;
 using MiEconomia.Api.Movimientos;
+using MiEconomia.Api.Subcuentas;
 
 namespace MiEconomia.Api.Controllers;
 
@@ -20,6 +21,7 @@ public class MovimientosController(AppDbContext db) : ControllerBase
             .Include(m => m.Categoria)
             .Include(m => m.Subcategoria)
             .Include(m => m.Cuenta)
+            .Include(m => m.Subcuenta)
             .Where(m => m.UsuarioId == UsuarioId);
 
     [HttpGet]
@@ -44,6 +46,8 @@ public class MovimientosController(AppDbContext db) : ControllerBase
             query = query.Where(m => m.SubcategoriaId == filtro.SubcategoriaId);
         if (filtro.CuentaId is not null)
             query = query.Where(m => m.CuentaId == filtro.CuentaId);
+        if (filtro.SubcuentaId is not null)
+            query = query.Where(m => m.SubcuentaId == filtro.SubcuentaId);
         if (filtro.Tipo is not null)
             query = query.Where(m => m.Categoria.Tipo == filtro.Tipo);
 
@@ -133,11 +137,19 @@ public class MovimientosController(AppDbContext db) : ControllerBase
                 ModelState.AddModelError(nameof(request.SubcategoriaId), "La subcategoría no pertenece a la categoría elegida.");
         }
 
-        // Lo mismo con la cuenta.
+        // Lo mismo con la cuenta. La subcuenta tiene que ser de esa cuenta.
         var cuenta = await db.Cuentas
+            .Include(c => c.Subcuentas)
             .FirstOrDefaultAsync(c => c.Id == request.CuentaId && c.UsuarioId == UsuarioId);
+        Subcuenta? subcuenta = null;
         if (cuenta is null)
             ModelState.AddModelError(nameof(request.CuentaId), "La cuenta no existe.");
+        else
+        {
+            (subcuenta, var errorSubcuenta) = SubcuentaElegida.De(cuenta, request.SubcuentaId);
+            if (errorSubcuenta is not null)
+                ModelState.AddModelError(nameof(request.SubcuentaId), errorSubcuenta);
+        }
 
         if (!ModelState.IsValid)
             return ValidationProblem(ModelState);
@@ -148,6 +160,8 @@ public class MovimientosController(AppDbContext db) : ControllerBase
         movimiento.SubcategoriaId = subcategoria?.Id;
         movimiento.Cuenta = cuenta!;
         movimiento.CuentaId = cuenta!.Id;
+        movimiento.Subcuenta = subcuenta!;
+        movimiento.SubcuentaId = subcuenta!.Id;
         movimiento.Monto = monto;
         movimiento.Fecha = request.Fecha!.Value;
         movimiento.Nota = string.IsNullOrWhiteSpace(request.Nota) ? null : request.Nota.Trim();

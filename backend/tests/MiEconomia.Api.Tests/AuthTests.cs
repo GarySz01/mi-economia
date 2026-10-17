@@ -43,14 +43,16 @@ public class AuthTests(ApiFactory api)
     }
 
     [Fact]
-    public async Task Registro_crea_la_cuenta_de_efectivo_sin_saldo()
+    public async Task Registro_crea_la_cuenta_de_efectivo_sin_saldo_con_su_subcuenta_en_pesos()
     {
         var sesion = await api.NuevoUsuarioAsync();
 
         var cuentas = await (await sesion.Cliente.GetAsync("/api/cuentas")).LeerAsync<List<CuentaResponse>>();
 
         var cuenta = Assert.Single(cuentas);
-        Assert.Equal(new CuentaResponse(cuenta.Id, "Efectivo", TipoCuenta.Efectivo, "#16A34A", 0, 0), cuenta);
+        Assert.Equal(("Efectivo", TipoCuenta.Efectivo, "#16A34A"), (cuenta.Nombre, cuenta.Tipo, cuenta.Color));
+        var subcuenta = Assert.Single(cuenta.Subcuentas);
+        Assert.Equal(new SubcuentaResponse(subcuenta.Id, "Disponible", "UYU", 0, 0), subcuenta);
     }
 
     [Fact]

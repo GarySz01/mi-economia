@@ -2,14 +2,15 @@ import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useCategorias, useCuentas, useEliminarMovimiento, useMovimientos } from '../api/consultas'
-import type { Movimiento, TipoMovimiento } from '../api/tipos'
+import type { Movimiento, SaldoPorMoneda, TipoMovimiento } from '../api/tipos'
 import { Confirmar } from '../components/Confirmar'
 import { FilaMovimiento } from '../components/FilaMovimiento'
 import { MovimientoFormulario } from '../components/MovimientoFormulario'
 import { SelectorMes } from '../components/SelectorMes'
 import { useMesSeleccionado } from '../hooks/useMesSeleccionado'
 import { Alerta, Boton, Cargando, Segmentado, Tarjeta, Vacio } from '../components/ui'
-import { formatFechaLarga, formatMonto, rangoDelMes } from '../lib/formato'
+import { formatFechaLarga, formatMonto, formatSaldos, rangoDelMes } from '../lib/formato'
+import { sumarPorMoneda } from '../lib/monedas'
 
 const TAMANIO_PAGINA = 20
 
@@ -20,9 +21,10 @@ export function Movimientos() {
   const [tipo, setTipo] = useState<FiltroTipo>('Todos')
   const [categoriaId, setCategoriaId] = useState('')
   const [pagina, setPagina] = useState(1)
-  // La cuenta va en la URL (?cuenta=) para poder llegar desde la página de cuentas ya filtrado.
+  // La cuenta (y la subcuenta) van en la URL (?cuenta=, ?subcuenta=) para poder llegar desde la página de cuentas ya filtrado.
   const [params, setParams] = useSearchParams()
   const cuentaId = params.get('cuenta') ?? ''
+  const subcuentaId = params.get('subcuenta') ?? ''
 
   const { desde, hasta } = rangoDelMes(mes)
   const { data: categorias = [] } = useCategorias()
@@ -33,6 +35,7 @@ export function Movimientos() {
     tipo: tipo === 'Todos' ? undefined : tipo,
     categoriaId: categoriaId || undefined,
     cuentaId: cuentaId || undefined,
+    subcuentaId: subcuentaId || undefined,
     pagina,
     tamanio: TAMANIO_PAGINA,
   })
@@ -54,12 +57,16 @@ export function Movimientos() {
     setCategoriaId('')
     setPagina(1)
   }
-  const cambiarCuenta = (nueva: string) => {
+  // El select de cuentas incluye las subcuentas: su valor es "cuentaId" o "cuentaId/subcuentaId".
+  const cambiarCuenta = (valor: string) => {
+    const [cuenta, subcuenta] = valor.split('/')
     setParams(
       (anteriores) => {
         const siguientes = new URLSearchParams(anteriores)
-        if (nueva) siguientes.set('cuenta', nueva)
+        if (cuenta) siguientes.set('cuenta', cuenta)
         else siguientes.delete('cuenta')
+        if (subcuenta) siguientes.set('subcuenta', subcuenta)
+        else siguientes.delete('subcuenta')
         return siguientes
       },
       { replace: true },
@@ -113,16 +120,23 @@ export function Movimientos() {
         </select>
         <select
           aria-label="Filtrar por cuenta"
-          value={cuentaId}
+          value={subcuentaId ? `${cuentaId}/${subcuentaId}` : cuentaId}
           onChange={(e) => cambiarCuenta(e.target.value)}
           className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
         >
           <option value="">Todas las cuentas</option>
-          {cuentas.map((c) => (
+          {cuentas.flatMap((c) => [
             <option key={c.id} value={c.id}>
               {c.nombre}
-            </option>
-          ))}
+            </option>,
+            ...(c.subcuentas.length > 1
+              ? c.subcuentas.map((s) => (
+                  <option key={s.id} value={`${c.id}/${s.id}`}>
+                    {`   ${c.nombre} › ${s.nombre}`}
+                  </option>
+                ))
+              : []),
+          ])}
         </select>
       </div>
 
@@ -135,11 +149,11 @@ export function Movimientos() {
           <Vacio titulo="No hay movimientos con estos filtros." />
         ) : (
           <div className="space-y-4">
-            {porDia.map(({ fecha, movimientos, total }) => (
+            {porDia.map(({ fecha, movimientos, totales }) => (
               <section key={fecha}>
                 <div className="flex items-baseline justify-between border-b border-slate-100 pb-1 text-xs font-medium text-slate-500">
                   <h2>{formatFechaLarga(fecha)}</h2>
-                  <span className="tabular-nums">{formatMonto(total)}</span>
+                  <span className="tabular-nums">{formatSaldos(totales)}</span>
                 </div>
                 <ul className="divide-y divide-slate-100">
                   {movimientos.map((m) => (
@@ -189,7 +203,7 @@ export function Movimientos() {
       >
         ¿Seguro que quieres eliminar{' '}
         <strong className="text-slate-800">
-          {aEliminar?.nota || aEliminar?.categoria.nombre} ({aEliminar && formatMonto(aEliminar.monto)})
+          {aEliminar?.nota || aEliminar?.categoria.nombre} ({aEliminar && formatMonto(aEliminar.monto, aEliminar.subcuenta.moneda)})
         </strong>
         ? Esta acción no se puede deshacer.
       </Confirmar>
@@ -199,18 +213,18 @@ export function Movimientos() {
 
 /**
  * Agrupa por fecha (la API ya los devuelve ordenados de más reciente a más antiguo).
- * El total del día es el neto: ingresos menos gastos.
+ * El total del día es el neto (ingresos menos gastos) de cada moneda.
  */
 function agruparPorDia(movimientos: Movimiento[]) {
-  const grupos: { fecha: string; movimientos: Movimiento[]; total: number }[] = []
+  const grupos: { fecha: string; movimientos: Movimiento[]; totales: SaldoPorMoneda[] }[] = []
   for (const m of movimientos) {
     let grupo = grupos.at(-1)
     if (!grupo || grupo.fecha !== m.fecha) {
-      grupo = { fecha: m.fecha, movimientos: [], total: 0 }
+      grupo = { fecha: m.fecha, movimientos: [], totales: [] }
       grupos.push(grupo)
     }
     grupo.movimientos.push(m)
-    grupo.total += m.categoria.tipo === 'Ingreso' ? m.monto : -m.monto
+    grupo.totales.push({ moneda: m.subcuenta.moneda, saldo: m.categoria.tipo === 'Ingreso' ? m.monto : -m.monto })
   }
-  return grupos
+  return grupos.map((g) => ({ ...g, totales: sumarPorMoneda(g.totales) }))
 }

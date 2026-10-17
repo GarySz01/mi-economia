@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { ApiError } from '../api/cliente'
 import { useGuardarCuenta } from '../api/consultas'
-import type { Cuenta, TipoCuenta } from '../api/tipos'
+import type { Cuenta, Moneda, TipoCuenta } from '../api/tipos'
 import { TIPOS_CUENTA } from '../lib/cuentas'
-import { montoParaEditar, parsearMontoConSigno } from '../lib/formato'
+import { parsearMontoConSigno } from '../lib/formato'
 import { COLORES } from '../lib/iconos'
+import { MONEDA_POR_DEFECTO, MONEDAS } from '../lib/monedas'
 import { IconoCuenta } from './IconoCuenta'
 import { Modal } from './Modal'
 import { SelectorColor } from './SelectorColor'
@@ -29,7 +30,9 @@ function Formulario({ cuenta, onListo }: { cuenta: Cuenta | null; onListo: () =>
   const guardar = useGuardarCuenta()
   const [nombre, setNombre] = useState(cuenta?.nombre ?? '')
   const [tipo, setTipo] = useState<TipoCuenta>(cuenta?.tipo ?? 'CuentaBancaria')
-  const [saldoInicial, setSaldoInicial] = useState(cuenta ? montoParaEditar(cuenta.saldoInicial) : '')
+  // La moneda y el saldo inicial son los de la primera subcuenta; solo se piden al crear.
+  const [moneda, setMoneda] = useState<Moneda>(MONEDA_POR_DEFECTO)
+  const [saldoInicial, setSaldoInicial] = useState('')
   const [color, setColor] = useState(cuenta?.color ?? COLORES[4])
   const [error, setError] = useState<ApiError | null>(null)
 
@@ -44,7 +47,7 @@ function Formulario({ cuenta, onListo }: { cuenta: Cuenta | null; onListo: () =>
     }
 
     try {
-      await guardar.mutateAsync({ id: cuenta?.id, datos: { nombre, tipo, saldoInicial: saldo, color } })
+      await guardar.mutateAsync({ id: cuenta?.id, datos: { nombre, tipo, color, moneda, saldoInicial: saldo } })
       onListo()
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, 'Ocurrió un error inesperado.'))
@@ -61,7 +64,7 @@ function Formulario({ cuenta, onListo }: { cuenta: Cuenta | null; onListo: () =>
           className="flex-1"
           etiqueta="Nombre"
           maxLength={50}
-          placeholder="Ej: Banco Nación, Visa, Mercado Pago"
+          placeholder="Ej: Itaú, Visa, Mercado Pago"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
           error={error?.campo('nombre')}
@@ -78,20 +81,41 @@ function Formulario({ cuenta, onListo }: { cuenta: Cuenta | null; onListo: () =>
         ))}
       </Select>
 
-      <Campo
-        etiqueta="Saldo inicial"
-        inputMode="decimal"
-        autoComplete="off"
-        placeholder="0,00"
-        value={saldoInicial}
-        onChange={(e) => setSaldoInicial(e.target.value)}
-        error={error?.campo('saldoInicial')}
-        ayuda={
-          tipo === 'TarjetaCredito'
-            ? 'Lo que debes en la tarjeta, en negativo (por ejemplo -20.000).'
-            : 'Cuánto dinero tiene la cuenta antes de cargar movimientos en la app.'
-        }
-      />
+      {cuenta ? (
+        <p className="text-xs text-slate-500">
+          Los saldos y las monedas se editan en cada subcuenta, desde la tarjeta de la cuenta.
+        </p>
+      ) : (
+        <>
+          <Select
+            etiqueta="Moneda"
+            value={moneda}
+            onChange={(e) => setMoneda(e.target.value as Moneda)}
+            error={error?.campo('moneda')}
+          >
+            {MONEDAS.map((m) => (
+              <option key={m.moneda} value={m.moneda}>
+                {m.nombre} ({m.simbolo})
+              </option>
+            ))}
+          </Select>
+
+          <Campo
+            etiqueta="Saldo inicial"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0,00"
+            value={saldoInicial}
+            onChange={(e) => setSaldoInicial(e.target.value)}
+            error={error?.campo('saldoInicial')}
+            ayuda={
+              tipo === 'TarjetaCredito'
+                ? 'Lo que debes en la tarjeta, en negativo (por ejemplo -20.000).'
+                : 'Queda en la subcuenta "Disponible". Después puedes agregar más subcuentas (ahorro, inversión, dólares…).'
+            }
+          />
+        </>
+      )}
 
       <SelectorColor valor={color} onChange={setColor} />
 

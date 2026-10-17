@@ -20,6 +20,7 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
     private SubcategoriaResponse _subcategoriaDeAna = null!;
     private MovimientoResponse _movimientoDeAna = null!;
     private CuentaResponse _cuentaDeAna = null!;
+    private SubcuentaResponse _subcuentaDeAna = null!;
     private TransferenciaResponse _transferenciaDeAna = null!;
 
     public async Task InitializeAsync()
@@ -31,6 +32,7 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
         _movimientoDeAna = await _ana.CrearMovimientoAsync(_categoriaDeAna.Id, 99999, "2026-10-05");
         _cuentaDeAna = await _ana.CrearCuentaAsync("Ahorros secretos", saldoInicial: 500000);
         _transferenciaDeAna = await _ana.CrearTransferenciaAsync(_ana.CuentaId, _cuentaDeAna.Id, 100, "2026-10-05");
+        _subcuentaDeAna = await _ana.CrearSubcuentaAsync(_cuentaDeAna.Id, "Escondida", "USD", 1000);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;
@@ -46,7 +48,7 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
         Assert.DoesNotContain(categorias, c => c.Id == _categoriaDeAna.Id);
         Assert.Contains("\"total\":0", movimientos);
         Assert.Equal([_beto.CuentaId], cuentas.Select(c => c.Id));
-        Assert.Equal(0, Assert.Single(cuentas).Saldo);
+        Assert.Equal(0, Assert.Single(cuentas).SaldoUnico());
         Assert.Contains("\"total\":0", transferencias);
     }
 
@@ -74,6 +76,9 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
         { "GET", "/api/cuentas/{cuenta}" },
         { "PUT", "/api/cuentas/{cuenta}" },
         { "DELETE", "/api/cuentas/{cuenta}" },
+        { "POST", "/api/cuentas/{cuenta}/subcuentas" },
+        { "PUT", "/api/cuentas/{cuenta}/subcuentas/{subcuenta}" },
+        { "DELETE", "/api/cuentas/{cuenta}/subcuentas/{subcuenta}" },
         { "GET", "/api/transferencias/{transferencia}" },
         { "PUT", "/api/transferencias/{transferencia}" },
         { "DELETE", "/api/transferencias/{transferencia}" },
@@ -87,12 +92,14 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
             .Replace("{subcategoria}", _subcategoriaDeAna.Id.ToString())
             .Replace("{categoria}", _categoriaDeAna.Id.ToString())
             .Replace("{movimiento}", _movimientoDeAna.Id.ToString())
+            .Replace("{subcuenta}", _subcuentaDeAna.Id.ToString())
             .Replace("{cuenta}", _cuentaDeAna.Id.ToString())
             .Replace("{transferencia}", _transferenciaDeAna.Id.ToString());
         // Cuerpo válido para que el 404 no se confunda con un 400 de validación.
         object cuerpo = ruta switch
         {
             _ when ruta.Contains("categorias") => new { nombre = "Hackeada" },
+            _ when ruta.Contains("subcuentas") => new { nombre = "Hackeada", moneda = "UYU", saldoInicial = 0 },
             _ when ruta.Contains("cuentas") => new { nombre = "Hackeada", tipo = TipoCuenta.Otra, saldoInicial = 0 },
             _ when ruta.Contains("transferencias") => new
             {
@@ -117,6 +124,8 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
         Assert.Equal(_movimientoDeAna, movimiento);
         var cuenta = await (await _ana.Cliente.GetAsync($"/api/cuentas/{_cuentaDeAna.Id}")).LeerAsync<CuentaResponse>();
         Assert.Equal("Ahorros secretos", cuenta.Nombre);
+        Assert.Equal(["Disponible", "Escondida"], cuenta.Subcuentas.Select(s => s.Nombre));
+        Assert.Equal(1000, cuenta.Subcuentas.Single(s => s.Id == _subcuentaDeAna.Id).Saldo);
         var transferencia = await (await _ana.Cliente.GetAsync($"/api/transferencias/{_transferenciaDeAna.Id}"))
             .LeerAsync<TransferenciaResponse>();
         Assert.Equal(_transferenciaDeAna, transferencia);
@@ -183,6 +192,28 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
 
         Assert.Equal(["La cuenta de origen no existe."], (await desde.LeerProblemaAsync(HttpStatusCode.BadRequest)).De("CuentaOrigenId"));
         Assert.Equal(["La cuenta de destino no existe."], (await hacia.LeerProblemaAsync(HttpStatusCode.BadRequest)).De("CuentaDestinoId"));
-        Assert.Equal(500100m, await _ana.SaldoAsync(_cuentaDeAna.Id));
+        var cuenta = await _ana.ObtenerCuentaAsync(_cuentaDeAna.Id);
+        Assert.Equal(500100m, cuenta.Subcuentas.Single(s => s.Nombre == "Disponible").Saldo);
+    }
+
+    [Fact]
+    public async Task No_se_puede_usar_la_subcuenta_de_otro_en_un_movimiento_ni_en_una_transferencia()
+    {
+        var propia = await _beto.CrearCategoriaAsync("Mía", TipoMovimiento.Egreso);
+
+        var movimiento = await _beto.Cliente.PostJsonAsync("/api/movimientos", new
+        {
+            categoriaId = propia.Id, cuentaId = _beto.CuentaId, subcuentaId = _subcuentaDeAna.Id, monto = 10, fecha = "2026-10-01",
+        });
+        var transferencia = await _beto.Cliente.PostJsonAsync("/api/transferencias", new
+        {
+            cuentaOrigenId = _beto.CuentaId, cuentaDestinoId = _beto.CuentaId, subcuentaDestinoId = _subcuentaDeAna.Id,
+            monto = 10, fecha = "2026-10-01",
+        });
+
+        Assert.Equal(["La subcuenta no pertenece a la cuenta elegida."],
+            (await movimiento.LeerProblemaAsync(HttpStatusCode.BadRequest)).De("SubcuentaId"));
+        Assert.Equal(["La subcuenta no pertenece a la cuenta elegida."],
+            (await transferencia.LeerProblemaAsync(HttpStatusCode.BadRequest)).De("SubcuentaDestinoId"));
     }
 }

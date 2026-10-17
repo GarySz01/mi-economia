@@ -3,8 +3,11 @@ import { Link } from 'react-router'
 import { ApiError } from '../api/cliente'
 import { useCategorias, useCuentas, useGuardarMovimiento } from '../api/consultas'
 import type { Movimiento, TipoMovimiento } from '../api/tipos'
+import { subcuentaEfectiva } from '../lib/cuentas'
 import { hoyIso, montoParaEditar, parsearMonto } from '../lib/formato'
+import { simboloMoneda } from '../lib/monedas'
 import { Modal } from './Modal'
+import { SelectorCuenta } from './SelectorCuenta'
 import { Alerta, Boton, Campo, Segmentado, Select } from './ui'
 
 interface Props {
@@ -43,6 +46,7 @@ function Formulario({
   const [subcategoriaId, setSubcategoriaId] = useState(movimiento?.subcategoria?.id ?? '')
   // Vacío = todavía no se eligió: se usa la cuenta inicial o la primera (las cuentas pueden llegar después).
   const [cuentaElegida, setCuentaElegida] = useState(movimiento?.cuenta.id ?? cuentaInicial ?? '')
+  const [subcuentaElegida, setSubcuentaElegida] = useState(movimiento?.subcuenta.id ?? '')
   const [monto, setMonto] = useState(movimiento ? montoParaEditar(movimiento.monto) : '')
   const [fecha, setFecha] = useState(movimiento?.fecha ?? hoyIso())
   const [nota, setNota] = useState(movimiento?.nota ?? '')
@@ -51,6 +55,7 @@ function Formulario({
   const disponibles = categorias.filter((c) => c.tipo === tipo)
   const subcategorias = categorias.find((c) => c.id === categoriaId)?.subcategorias ?? []
   const cuentaId = cuentaElegida || (cuentas[0]?.id ?? '')
+  const subcuenta = subcuentaEfectiva(cuentas.find((c) => c.id === cuentaId), subcuentaElegida)
 
   // La subcategoría depende de la categoría: al cambiar esta, se vuelve a elegir.
   const cambiarTipo = (nuevo: TipoMovimiento) => {
@@ -81,6 +86,7 @@ function Formulario({
           categoriaId,
           subcategoriaId: subcategoriaId || null,
           cuentaId,
+          subcuentaId: subcuenta?.id ?? null,
           monto: valor,
           fecha,
           nota: nota.trim() || null,
@@ -108,7 +114,7 @@ function Formulario({
       />
 
       <Campo
-        etiqueta="Monto"
+        etiqueta={subcuenta ? `Monto (${simboloMoneda(subcuenta.moneda)})` : 'Monto'}
         inputMode="decimal"
         autoComplete="off"
         placeholder="0,00"
@@ -159,21 +165,19 @@ function Formulario({
         </Select>
       )}
 
-      <Select
+      <SelectorCuenta
         etiqueta={tipo === 'Egreso' ? 'Pagado con' : 'Ingresó en'}
-        value={cuentaId}
-        onChange={(e) => setCuentaElegida(e.target.value)}
-        error={error?.campo('cuentaId')}
-        disabled={cargandoCuentas}
-        required
-      >
-        <option value="">{cargandoCuentas ? 'Cargando…' : 'Elige una cuenta'}</option>
-        {cuentas.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.nombre}
-          </option>
-        ))}
-      </Select>
+        cuentas={cuentas}
+        cargando={cargandoCuentas}
+        cuentaId={cuentaId}
+        subcuentaId={subcuentaElegida}
+        onChange={(cuenta, subcuenta) => {
+          setCuentaElegida(cuenta)
+          setSubcuentaElegida(subcuenta)
+        }}
+        errorCuenta={error?.campo('cuentaId')}
+        errorSubcuenta={error?.campo('subcuentaId')}
+      />
       {!cargandoCuentas && cuentas.length === 0 && (
         <p className="-mt-2 text-xs text-slate-500">
           No tienes cuentas.{' '}

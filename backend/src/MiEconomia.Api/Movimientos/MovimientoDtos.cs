@@ -16,6 +16,9 @@ public record GuardarMovimientoRequest(
     [Required(ErrorMessage = "La cuenta es obligatoria.")]
     Guid? CuentaId,
 
+    // Obligatoria solo si la cuenta tiene más de una subcuenta.
+    Guid? SubcuentaId,
+
     [Required(ErrorMessage = "El monto es obligatorio.")]
     [Range(typeof(decimal), "0.01", "9999999999999999.99",
         ParseLimitsInInvariantCulture = true, ConvertValueInInvariantCulture = true, ErrorMessage = "El monto debe ser mayor a 0.")]
@@ -27,6 +30,7 @@ public record GuardarMovimientoRequest(
     [StringLength(250, ErrorMessage = "La nota puede tener hasta 250 caracteres.")]
     string? Nota);
 
+/// <param name="Monto">En la moneda de la subcuenta.</param>
 public record MovimientoResponse(
     Guid Id,
     decimal Monto,
@@ -34,10 +38,12 @@ public record MovimientoResponse(
     string? Nota,
     CategoriaResponse Categoria,
     CuentaBasicaResponse Cuenta,
+    SubcuentaBasicaResponse Subcuenta,
     SubcategoriaResponse? Subcategoria)
 {
     public static MovimientoResponse Desde(Movimiento m) =>
         new(m.Id, m.Monto, m.Fecha, m.Nota, CategoriaResponse.Desde(m.Categoria), CuentaBasicaResponse.Desde(m.Cuenta),
+            SubcuentaBasicaResponse.Desde(m.Subcuenta),
             m.Subcategoria is null ? null : SubcategoriaResponse.Desde(m.Subcategoria));
 }
 
@@ -47,6 +53,7 @@ public record MovimientosFiltro(
     Guid? CategoriaId,
     Guid? SubcategoriaId,
     Guid? CuentaId,
+    Guid? SubcuentaId,
     TipoMovimiento? Tipo,
     [Range(1, int.MaxValue, ErrorMessage = "La página empieza en 1.")]
     int Pagina = 1,

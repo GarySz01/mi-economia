@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Subcategoria> Subcategorias => Set<Subcategoria>();
     public DbSet<Movimiento> Movimientos => Set<Movimiento>();
     public DbSet<Cuenta> Cuentas => Set<Cuenta>();
+    public DbSet<Subcuenta> Subcuentas => Set<Subcuenta>();
     public DbSet<Transferencia> Transferencias => Set<Transferencia>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -77,10 +78,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
                 .HasForeignKey(m => m.SubcategoriaId)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            // Lo mismo con las cuentas.
+            // Lo mismo con las cuentas y las subcuentas.
             e.HasOne(m => m.Cuenta)
                 .WithMany(c => c.Movimientos)
                 .HasForeignKey(m => m.CuentaId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(m => m.Subcuenta)
+                .WithMany()
+                .HasForeignKey(m => m.SubcuentaId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -88,7 +93,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
         {
             e.Property(c => c.Nombre).HasMaxLength(50).IsRequired();
             e.Property(c => c.Tipo).HasConversion<string>().HasMaxLength(20);
-            e.Property(c => c.SaldoInicial).HasPrecision(18, 2);
             e.Property(c => c.Color).HasMaxLength(7);
 
             e.HasIndex(c => new { c.UsuarioId, c.Nombre }).IsUnique();
@@ -99,14 +103,33 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<Subcuenta>(e =>
+        {
+            e.Property(s => s.Nombre).HasMaxLength(50).IsRequired();
+            e.Property(s => s.Moneda).HasMaxLength(3).IsFixedLength().IsRequired();
+            e.Property(s => s.SaldoInicial).HasPrecision(18, 2);
+
+            // No se repite el nombre dentro de la misma cuenta.
+            e.HasIndex(s => new { s.CuentaId, s.Nombre }).IsUnique();
+
+            // Al borrar una cuenta (solo se puede si no tiene movimientos) se borran sus subcuentas.
+            e.HasOne(s => s.Cuenta)
+                .WithMany(c => c.Subcuentas)
+                .HasForeignKey(s => s.CuentaId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         builder.Entity<Transferencia>(e =>
         {
             e.Property(t => t.Monto).HasPrecision(18, 2);
+            e.Property(t => t.MontoDestino).HasPrecision(18, 2);
             e.Property(t => t.Nota).HasMaxLength(250);
             e.ToTable(t =>
             {
                 t.HasCheckConstraint("CK_Transferencias_Monto_Positivo", "\"Monto\" > 0");
-                t.HasCheckConstraint("CK_Transferencias_Cuentas_Distintas", "\"CuentaOrigenId\" <> \"CuentaDestinoId\"");
+                t.HasCheckConstraint("CK_Transferencias_MontoDestino_Positivo", "\"MontoDestino\" IS NULL OR \"MontoDestino\" > 0");
+                // Puede ser la misma cuenta (por ejemplo, del día a día al ahorro), pero no la misma subcuenta.
+                t.HasCheckConstraint("CK_Transferencias_Subcuentas_Distintas", "\"SubcuentaOrigenId\" <> \"SubcuentaDestinoId\"");
             });
 
             e.HasIndex(t => new { t.UsuarioId, t.Fecha });
@@ -124,6 +147,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             e.HasOne(t => t.CuentaDestino)
                 .WithMany()
                 .HasForeignKey(t => t.CuentaDestinoId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(t => t.SubcuentaOrigen)
+                .WithMany()
+                .HasForeignKey(t => t.SubcuentaOrigenId)
+                .OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(t => t.SubcuentaDestino)
+                .WithMany()
+                .HasForeignKey(t => t.SubcuentaDestinoId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
