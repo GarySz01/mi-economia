@@ -2,12 +2,16 @@ using System.ComponentModel.DataAnnotations;
 using MiEconomia.Api.Categorias;
 using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Domain;
+using MiEconomia.Api.Subcategorias;
 
 namespace MiEconomia.Api.Movimientos;
 
 public record GuardarMovimientoRequest(
     [Required(ErrorMessage = "La categoría es obligatoria.")]
     Guid? CategoriaId,
+
+    // Opcional; tiene que ser una subcategoría de la categoría elegida.
+    Guid? SubcategoriaId,
 
     [Required(ErrorMessage = "La cuenta es obligatoria.")]
     Guid? CuentaId,
@@ -29,16 +33,19 @@ public record MovimientoResponse(
     DateOnly Fecha,
     string? Nota,
     CategoriaResponse Categoria,
-    CuentaBasicaResponse Cuenta)
+    CuentaBasicaResponse Cuenta,
+    SubcategoriaResponse? Subcategoria)
 {
     public static MovimientoResponse Desde(Movimiento m) =>
-        new(m.Id, m.Monto, m.Fecha, m.Nota, CategoriaResponse.Desde(m.Categoria), CuentaBasicaResponse.Desde(m.Cuenta));
+        new(m.Id, m.Monto, m.Fecha, m.Nota, CategoriaResponse.Desde(m.Categoria), CuentaBasicaResponse.Desde(m.Cuenta),
+            m.Subcategoria is null ? null : SubcategoriaResponse.Desde(m.Subcategoria));
 }
 
 public record MovimientosFiltro(
     DateOnly? Desde,
     DateOnly? Hasta,
     Guid? CategoriaId,
+    Guid? SubcategoriaId,
     Guid? CuentaId,
     TipoMovimiento? Tipo,
     [Range(1, int.MaxValue, ErrorMessage = "La página empieza en 1.")]

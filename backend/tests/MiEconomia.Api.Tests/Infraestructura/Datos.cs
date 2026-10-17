@@ -3,6 +3,7 @@ using MiEconomia.Api.Categorias;
 using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Domain;
 using MiEconomia.Api.Movimientos;
+using MiEconomia.Api.Subcategorias;
 using MiEconomia.Api.Transferencias;
 
 namespace MiEconomia.Api.Tests.Infraestructura;
@@ -17,12 +18,19 @@ public static class Datos
         return await respuesta.LeerAsync<CategoriaResponse>(HttpStatusCode.Created);
     }
 
+    public static async Task<SubcategoriaResponse> CrearSubcategoriaAsync(this Sesion sesion, Guid categoriaId, string nombre)
+    {
+        var respuesta = await sesion.Cliente.PostJsonAsync($"/api/categorias/{categoriaId}/subcategorias", new { nombre });
+        return await respuesta.LeerAsync<SubcategoriaResponse>(HttpStatusCode.Created);
+    }
+
     /// <param name="cuentaId">Por defecto, la cuenta que se creó al registrarse.</param>
     public static async Task<MovimientoResponse> CrearMovimientoAsync(
-        this Sesion sesion, Guid categoriaId, decimal monto, string fecha, string? nota = null, Guid? cuentaId = null)
+        this Sesion sesion, Guid categoriaId, decimal monto, string fecha, string? nota = null, Guid? cuentaId = null,
+        Guid? subcategoriaId = null)
     {
         var respuesta = await sesion.Cliente.PostJsonAsync("/api/movimientos",
-            new { categoriaId, cuentaId = cuentaId ?? sesion.CuentaId, monto, fecha, nota });
+            new { categoriaId, subcategoriaId, cuentaId = cuentaId ?? sesion.CuentaId, monto, fecha, nota });
         return await respuesta.LeerAsync<MovimientoResponse>(HttpStatusCode.Created);
     }
 

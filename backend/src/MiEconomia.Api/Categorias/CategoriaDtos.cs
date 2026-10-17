@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using MiEconomia.Api.Domain;
+using MiEconomia.Api.Subcategorias;
 
 namespace MiEconomia.Api.Categorias;
 
@@ -29,7 +30,22 @@ public record ActualizarCategoriaRequest(
     [StringLength(50, ErrorMessage = "El ícono puede tener hasta 50 caracteres.")]
     string? Icono);
 
+/// <summary>Datos de la categoría que se incluyen en un movimiento o en el resumen (sin las subcategorías).</summary>
 public record CategoriaResponse(Guid Id, string Nombre, TipoMovimiento Tipo, string? Color, string? Icono)
 {
     public static CategoriaResponse Desde(Categoria c) => new(c.Id, c.Nombre, c.Tipo, c.Color, c.Icono);
+}
+
+/// <summary>Lo que devuelven los endpoints de categorías. Requiere haber cargado las subcategorías.</summary>
+public record CategoriaConSubcategoriasResponse(
+    Guid Id,
+    string Nombre,
+    TipoMovimiento Tipo,
+    string? Color,
+    string? Icono,
+    IReadOnlyList<SubcategoriaResponse> Subcategorias)
+{
+    public static CategoriaConSubcategoriasResponse Desde(Categoria c) =>
+        new(c.Id, c.Nombre, c.Tipo, c.Color, c.Icono,
+            c.Subcategorias.OrderBy(s => s.Nombre, StringComparer.CurrentCultureIgnoreCase).Select(SubcategoriaResponse.Desde).ToList());
 }

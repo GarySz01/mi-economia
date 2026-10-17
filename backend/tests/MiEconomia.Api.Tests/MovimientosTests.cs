@@ -194,7 +194,7 @@ public class MovimientosTests(ApiFactory api)
 
         var actualizado = await respuesta.LeerAsync<MovimientoResponse>();
         Assert.Equal(new MovimientoResponse(movimiento.Id, 250.75m, new DateOnly(2026, 10, 5), "Cumpleaños", regalos,
-            new CuentaBasicaResponse(banco.Id, "Banco", TipoCuenta.CuentaBancaria, null)), actualizado);
+            new CuentaBasicaResponse(banco.Id, "Banco", TipoCuenta.CuentaBancaria, null), null), actualizado);
     }
 
     [Fact]

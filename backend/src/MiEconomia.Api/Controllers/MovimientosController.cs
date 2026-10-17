@@ -16,7 +16,11 @@ public class MovimientosController(AppDbContext db) : ControllerBase
     private Guid UsuarioId => User.GetUsuarioId();
 
     private IQueryable<Movimiento> MisMovimientos =>
-        db.Movimientos.Include(m => m.Categoria).Include(m => m.Cuenta).Where(m => m.UsuarioId == UsuarioId);
+        db.Movimientos
+            .Include(m => m.Categoria)
+            .Include(m => m.Subcategoria)
+            .Include(m => m.Cuenta)
+            .Where(m => m.UsuarioId == UsuarioId);
 
     [HttpGet]
     [ProducesResponseType<PaginaResponse<MovimientoResponse>>(StatusCodes.Status200OK)]
@@ -36,6 +40,8 @@ public class MovimientosController(AppDbContext db) : ControllerBase
             query = query.Where(m => m.Fecha <= filtro.Hasta);
         if (filtro.CategoriaId is not null)
             query = query.Where(m => m.CategoriaId == filtro.CategoriaId);
+        if (filtro.SubcategoriaId is not null)
+            query = query.Where(m => m.SubcategoriaId == filtro.SubcategoriaId);
         if (filtro.CuentaId is not null)
             query = query.Where(m => m.CuentaId == filtro.CuentaId);
         if (filtro.Tipo is not null)
@@ -117,6 +123,16 @@ public class MovimientosController(AppDbContext db) : ControllerBase
         if (categoria is null)
             ModelState.AddModelError(nameof(request.CategoriaId), "La categoría no existe.");
 
+        // La subcategoría es opcional, pero si viene tiene que ser de esa categoría (y por lo tanto del usuario).
+        Subcategoria? subcategoria = null;
+        if (request.SubcategoriaId is not null && categoria is not null)
+        {
+            subcategoria = await db.Subcategorias
+                .FirstOrDefaultAsync(s => s.Id == request.SubcategoriaId && s.CategoriaId == categoria.Id);
+            if (subcategoria is null)
+                ModelState.AddModelError(nameof(request.SubcategoriaId), "La subcategoría no pertenece a la categoría elegida.");
+        }
+
         // Lo mismo con la cuenta.
         var cuenta = await db.Cuentas
             .FirstOrDefaultAsync(c => c.Id == request.CuentaId && c.UsuarioId == UsuarioId);
@@ -128,6 +144,8 @@ public class MovimientosController(AppDbContext db) : ControllerBase
 
         movimiento.Categoria = categoria!;
         movimiento.CategoriaId = categoria!.Id;
+        movimiento.Subcategoria = subcategoria;
+        movimiento.SubcategoriaId = subcategoria?.Id;
         movimiento.Cuenta = cuenta!;
         movimiento.CuentaId = cuenta!.Id;
         movimiento.Monto = monto;

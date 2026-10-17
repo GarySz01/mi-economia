@@ -4,6 +4,7 @@ using MiEconomia.Api.Cuentas;
 using MiEconomia.Api.Domain;
 using MiEconomia.Api.Movimientos;
 using MiEconomia.Api.Resumen;
+using MiEconomia.Api.Subcategorias;
 using MiEconomia.Api.Tests.Infraestructura;
 using MiEconomia.Api.Transferencias;
 
@@ -16,6 +17,7 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
     private Sesion _ana = null!;
     private Sesion _beto = null!;
     private CategoriaResponse _categoriaDeAna = null!;
+    private SubcategoriaResponse _subcategoriaDeAna = null!;
     private MovimientoResponse _movimientoDeAna = null!;
     private CuentaResponse _cuentaDeAna = null!;
     private TransferenciaResponse _transferenciaDeAna = null!;
@@ -25,6 +27,7 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
         _ana = await api.NuevoUsuarioAsync("Ana");
         _beto = await api.NuevoUsuarioAsync("Beto");
         _categoriaDeAna = await _ana.CrearCategoriaAsync("Privada", TipoMovimiento.Egreso);
+        _subcategoriaDeAna = await _ana.CrearSubcategoriaAsync(_categoriaDeAna.Id, "Secreta");
         _movimientoDeAna = await _ana.CrearMovimientoAsync(_categoriaDeAna.Id, 99999, "2026-10-05");
         _cuentaDeAna = await _ana.CrearCuentaAsync("Ahorros secretos", saldoInicial: 500000);
         _transferenciaDeAna = await _ana.CrearTransferenciaAsync(_ana.CuentaId, _cuentaDeAna.Id, 100, "2026-10-05");
@@ -62,6 +65,9 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
         { "GET", "/api/categorias/{categoria}" },
         { "PUT", "/api/categorias/{categoria}" },
         { "DELETE", "/api/categorias/{categoria}" },
+        { "POST", "/api/categorias/{categoria}/subcategorias" },
+        { "PUT", "/api/categorias/{categoria}/subcategorias/{subcategoria}" },
+        { "DELETE", "/api/categorias/{categoria}/subcategorias/{subcategoria}" },
         { "GET", "/api/movimientos/{movimiento}" },
         { "PUT", "/api/movimientos/{movimiento}" },
         { "DELETE", "/api/movimientos/{movimiento}" },
@@ -78,6 +84,7 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
     public async Task Acceder_a_datos_de_otro_usuario_devuelve_404(string metodo, string ruta)
     {
         var url = ruta
+            .Replace("{subcategoria}", _subcategoriaDeAna.Id.ToString())
             .Replace("{categoria}", _categoriaDeAna.Id.ToString())
             .Replace("{movimiento}", _movimientoDeAna.Id.ToString())
             .Replace("{cuenta}", _cuentaDeAna.Id.ToString())
@@ -97,6 +104,7 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
         var respuesta = metodo switch
         {
             "GET" => await _beto.Cliente.GetAsync(url),
+            "POST" => await _beto.Cliente.PostJsonAsync(url, cuerpo),
             "PUT" => await _beto.Cliente.PutJsonAsync(url, cuerpo),
             _ => await _beto.Cliente.DeleteAsync(url),
         };
@@ -112,6 +120,23 @@ public class AislamientoTests(ApiFactory api) : IAsyncLifetime
         var transferencia = await (await _ana.Cliente.GetAsync($"/api/transferencias/{_transferenciaDeAna.Id}"))
             .LeerAsync<TransferenciaResponse>();
         Assert.Equal(_transferenciaDeAna, transferencia);
+        var categoria = await (await _ana.Cliente.GetAsync($"/api/categorias/{_categoriaDeAna.Id}"))
+            .LeerAsync<CategoriaConSubcategoriasResponse>();
+        Assert.Equal([_subcategoriaDeAna], categoria.Subcategorias);
+    }
+
+    [Fact]
+    public async Task No_se_puede_crear_un_movimiento_con_la_subcategoria_de_otro()
+    {
+        var propia = await _beto.CrearCategoriaAsync("Mía", TipoMovimiento.Egreso);
+
+        var respuesta = await _beto.Cliente.PostJsonAsync("/api/movimientos", new
+        {
+            categoriaId = propia.Id, subcategoriaId = _subcategoriaDeAna.Id, cuentaId = _beto.CuentaId, monto = 10, fecha = "2026-10-01",
+        });
+
+        var problema = await respuesta.LeerProblemaAsync(HttpStatusCode.BadRequest);
+        Assert.Equal(["La subcategoría no pertenece a la categoría elegida."], problema.De("SubcategoriaId"));
     }
 
     [Fact]

@@ -1,7 +1,7 @@
 import { api, query } from './cliente'
 import type {
   AuthResponse,
-  Categoria,
+  CategoriaConSubcategorias,
   CategoriaInput,
   Cuenta,
   CuentaInput,
@@ -10,6 +10,7 @@ import type {
   MovimientosFiltro,
   Pagina,
   Resumen,
+  Subcategoria,
   TipoMovimiento,
   TotalMensual,
   Transferencia,
@@ -27,11 +28,21 @@ export const authApi = {
 }
 
 export const categoriasApi = {
-  listar: (tipo?: TipoMovimiento) => api<Categoria[]>(`/categorias${query({ tipo })}`),
-  crear: (datos: CategoriaInput) => api<Categoria>('/categorias', { method: 'POST', body: datos }),
+  listar: (tipo?: TipoMovimiento) => api<CategoriaConSubcategorias[]>(`/categorias${query({ tipo })}`),
+  crear: (datos: CategoriaInput) => api<CategoriaConSubcategorias>('/categorias', { method: 'POST', body: datos }),
   actualizar: (id: string, datos: Omit<CategoriaInput, 'tipo'>) =>
-    api<Categoria>(`/categorias/${id}`, { method: 'PUT', body: datos }),
+    api<CategoriaConSubcategorias>(`/categorias/${id}`, { method: 'PUT', body: datos }),
   eliminar: (id: string) => api<void>(`/categorias/${id}`, { method: 'DELETE' }),
+}
+
+// Se listan dentro de cada categoría (categoriasApi.listar).
+export const subcategoriasApi = {
+  crear: (categoriaId: string, nombre: string) =>
+    api<Subcategoria>(`/categorias/${categoriaId}/subcategorias`, { method: 'POST', body: { nombre } }),
+  actualizar: (categoriaId: string, id: string, nombre: string) =>
+    api<Subcategoria>(`/categorias/${categoriaId}/subcategorias/${id}`, { method: 'PUT', body: { nombre } }),
+  eliminar: (categoriaId: string, id: string) =>
+    api<void>(`/categorias/${categoriaId}/subcategorias/${id}`, { method: 'DELETE' }),
 }
 
 export const movimientosApi = {

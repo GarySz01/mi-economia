@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     : IdentityDbContext<Usuario, IdentityRole<Guid>, Guid>(options)
 {
     public DbSet<Categoria> Categorias => Set<Categoria>();
+    public DbSet<Subcategoria> Subcategorias => Set<Subcategoria>();
     public DbSet<Movimiento> Movimientos => Set<Movimiento>();
     public DbSet<Cuenta> Cuentas => Set<Cuenta>();
     public DbSet<Transferencia> Transferencias => Set<Transferencia>();
@@ -38,6 +39,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        builder.Entity<Subcategoria>(e =>
+        {
+            e.Property(s => s.Nombre).HasMaxLength(50).IsRequired();
+
+            // No se repite el nombre dentro de la misma categoría.
+            e.HasIndex(s => new { s.CategoriaId, s.Nombre }).IsUnique();
+
+            e.HasOne(s => s.Categoria)
+                .WithMany(c => c.Subcategorias)
+                .HasForeignKey(s => s.CategoriaId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         builder.Entity<Movimiento>(e =>
         {
             e.Property(m => m.Monto).HasPrecision(18, 2);
@@ -56,6 +70,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
                 .WithMany(c => c.Movimientos)
                 .HasForeignKey(m => m.CategoriaId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Al borrar una subcategoría, sus movimientos quedan en la categoría sin subcategoría.
+            e.HasOne(m => m.Subcategoria)
+                .WithMany(s => s.Movimientos)
+                .HasForeignKey(m => m.SubcategoriaId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // Lo mismo con las cuentas.
             e.HasOne(m => m.Cuenta)

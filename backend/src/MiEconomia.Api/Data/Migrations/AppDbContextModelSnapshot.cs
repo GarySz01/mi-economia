@@ -124,6 +124,9 @@ namespace MiEconomia.Api.Data.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)");
 
+                    b.Property<Guid?>("SubcategoriaId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("UsuarioId")
                         .HasColumnType("uuid");
 
@@ -133,12 +136,39 @@ namespace MiEconomia.Api.Data.Migrations
 
                     b.HasIndex("CuentaId");
 
+                    b.HasIndex("SubcategoriaId");
+
                     b.HasIndex("UsuarioId", "Fecha");
 
                     b.ToTable("Movimientos", t =>
                         {
                             t.HasCheckConstraint("CK_Movimientos_Monto_Positivo", "\"Monto\" > 0");
                         });
+                });
+
+            modelBuilder.Entity("MiEconomia.Api.Domain.Subcategoria", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CategoriaId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoriaId", "Nombre")
+                        .IsUnique();
+
+                    b.ToTable("Subcategorias");
                 });
 
             modelBuilder.Entity("MiEconomia.Api.Domain.Transferencia", b =>
@@ -425,6 +455,11 @@ namespace MiEconomia.Api.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("MiEconomia.Api.Domain.Subcategoria", "Subcategoria")
+                        .WithMany("Movimientos")
+                        .HasForeignKey("SubcategoriaId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("MiEconomia.Api.Domain.Usuario", "Usuario")
                         .WithMany("Movimientos")
                         .HasForeignKey("UsuarioId")
@@ -435,7 +470,20 @@ namespace MiEconomia.Api.Data.Migrations
 
                     b.Navigation("Cuenta");
 
+                    b.Navigation("Subcategoria");
+
                     b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("MiEconomia.Api.Domain.Subcategoria", b =>
+                {
+                    b.HasOne("MiEconomia.Api.Domain.Categoria", "Categoria")
+                        .WithMany("Subcategorias")
+                        .HasForeignKey("CategoriaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Categoria");
                 });
 
             modelBuilder.Entity("MiEconomia.Api.Domain.Transferencia", b =>
@@ -519,9 +567,16 @@ namespace MiEconomia.Api.Data.Migrations
             modelBuilder.Entity("MiEconomia.Api.Domain.Categoria", b =>
                 {
                     b.Navigation("Movimientos");
+
+                    b.Navigation("Subcategorias");
                 });
 
             modelBuilder.Entity("MiEconomia.Api.Domain.Cuenta", b =>
+                {
+                    b.Navigation("Movimientos");
+                });
+
+            modelBuilder.Entity("MiEconomia.Api.Domain.Subcategoria", b =>
                 {
                     b.Navigation("Movimientos");
                 });

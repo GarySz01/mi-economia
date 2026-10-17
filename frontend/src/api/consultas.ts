@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { categoriasApi, cuentasApi, movimientosApi, resumenApi, transferenciasApi } from './endpoints'
+import { categoriasApi, cuentasApi, movimientosApi, resumenApi, subcategoriasApi, transferenciasApi } from './endpoints'
 import type {
   CategoriaInput,
   CuentaInput,
@@ -98,6 +98,24 @@ export function useEliminarCategoria() {
   return useMutation({
     mutationFn: (id: string) => categoriasApi.eliminar(id),
     onSuccess: () => invalidar(claves.categorias),
+  })
+}
+
+// Las subcategorías vienen dentro de las categorías, y su nombre se muestra en los movimientos.
+export function useGuardarSubcategoria() {
+  const invalidar = useInvalidar()
+  return useMutation({
+    mutationFn: ({ categoriaId, id, nombre }: { categoriaId: string; id?: string; nombre: string }) =>
+      id ? subcategoriasApi.actualizar(categoriaId, id, nombre) : subcategoriasApi.crear(categoriaId, nombre),
+    onSuccess: () => invalidar(claves.categorias, claves.movimientos),
+  })
+}
+
+export function useEliminarSubcategoria() {
+  const invalidar = useInvalidar()
+  return useMutation({
+    mutationFn: ({ categoriaId, id }: { categoriaId: string; id: string }) => subcategoriasApi.eliminar(categoriaId, id),
+    onSuccess: () => invalidar(claves.categorias, claves.movimientos),
   })
 }
 

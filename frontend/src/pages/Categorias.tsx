@@ -1,9 +1,10 @@
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { CornerDownRight, ListPlus, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { useCategorias, useEliminarCategoria } from '../api/consultas'
-import type { Categoria, TipoMovimiento } from '../api/tipos'
+import { useCategorias, useEliminarCategoria, useEliminarSubcategoria } from '../api/consultas'
+import type { Categoria, Subcategoria, TipoMovimiento } from '../api/tipos'
 import { CategoriaFormulario } from '../components/CategoriaFormulario'
 import { Confirmar } from '../components/Confirmar'
+import { SubcategoriaFormulario } from '../components/SubcategoriaFormulario'
 import { Alerta, Cargando, Tarjeta, Vacio } from '../components/ui'
 import { IconoCategoria } from '../components/IconoCategoria'
 
@@ -17,6 +18,14 @@ export function Categorias() {
     tipo: TipoMovimiento
   }>({ abierto: false, categoria: null, tipo: 'Egreso' })
   const [aEliminar, setAEliminar] = useState<Categoria | null>(null)
+
+  const eliminarSub = useEliminarSubcategoria()
+  const [subformulario, setSubformulario] = useState<{
+    abierto: boolean
+    categoria: Categoria | null
+    subcategoria: Subcategoria | null
+  }>({ abierto: false, categoria: null, subcategoria: null })
+  const [subAEliminar, setSubAEliminar] = useState<{ categoria: Categoria; subcategoria: Subcategoria } | null>(null)
 
   const nueva = (tipo: TipoMovimiento) => setFormulario({ abierto: true, categoria: null, tipo })
   const editar = (categoria: Categoria) => setFormulario({ abierto: true, categoria, tipo: categoria.tipo })
@@ -52,25 +61,62 @@ export function Categorias() {
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {lista.map((c) => (
-                      <li key={c.id} className="flex items-center gap-3 py-2.5">
-                        <IconoCategoria icono={c.icono} color={c.color} tamanio="sm" />
-                        <span className="flex-1 truncate text-sm font-medium text-slate-700">{c.nombre}</span>
-                        <button
-                          type="button"
-                          onClick={() => editar(c)}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                          aria-label={`Editar ${c.nombre}`}
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setAEliminar(c)}
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                          aria-label={`Eliminar ${c.nombre}`}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
+                      <li key={c.id} className="py-2.5">
+                        <div className="flex items-center gap-3">
+                          <IconoCategoria icono={c.icono} color={c.color} tamanio="sm" />
+                          <span className="flex-1 truncate text-sm font-medium text-slate-700">{c.nombre}</span>
+                          <button
+                            type="button"
+                            onClick={() => setSubformulario({ abierto: true, categoria: c, subcategoria: null })}
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-emerald-50 hover:text-emerald-700"
+                            aria-label={`Agregar subcategoría a ${c.nombre}`}
+                            title="Agregar subcategoría"
+                          >
+                            <ListPlus className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => editar(c)}
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            aria-label={`Editar ${c.nombre}`}
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAEliminar(c)}
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                            aria-label={`Eliminar ${c.nombre}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                        {c.subcategorias.length > 0 && (
+                          <ul className="mt-1 ml-11 space-y-0.5">
+                            {c.subcategorias.map((s) => (
+                              <li key={s.id} className="flex items-center gap-2">
+                                <CornerDownRight className="size-3.5 shrink-0 text-slate-300" aria-hidden />
+                                <span className="flex-1 truncate text-sm text-slate-600">{s.nombre}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setSubformulario({ abierto: true, categoria: c, subcategoria: s })}
+                                  className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                                  aria-label={`Editar ${s.nombre}`}
+                                >
+                                  <Pencil className="size-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSubAEliminar({ categoria: c, subcategoria: s })}
+                                  className="rounded-md p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                                  aria-label={`Eliminar ${s.nombre}`}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -96,6 +142,26 @@ export function Categorias() {
       >
         ¿Seguro que quieres eliminar la categoría <strong className="text-slate-800">{aEliminar?.nombre}</strong>?
         Si tiene movimientos no se podrá eliminar.
+      </Confirmar>
+
+      <SubcategoriaFormulario
+        abierto={subformulario.abierto}
+        categoria={subformulario.categoria}
+        subcategoria={subformulario.subcategoria}
+        onCerrar={() => setSubformulario((f) => ({ ...f, abierto: false }))}
+      />
+
+      <Confirmar
+        titulo="Eliminar subcategoría"
+        abierto={subAEliminar !== null}
+        onCerrar={() => setSubAEliminar(null)}
+        onConfirmar={() =>
+          eliminarSub.mutateAsync({ categoriaId: subAEliminar!.categoria.id, id: subAEliminar!.subcategoria.id })
+        }
+      >
+        ¿Seguro que quieres eliminar la subcategoría{' '}
+        <strong className="text-slate-800">{subAEliminar?.subcategoria.nombre}</strong>? Sus movimientos quedan en{' '}
+        {subAEliminar?.categoria.nombre}, sin subcategoría.
       </Confirmar>
     </div>
   )

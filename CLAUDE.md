@@ -20,15 +20,15 @@ backend/
   MiEconomia.sln
   .config/dotnet-tools.json dotnet-ef como herramienta local
   src/MiEconomia.Api/
-    Domain/                 Entidades: Usuario (IdentityUser<Guid>), Categoria, Movimiento, TipoMovimiento, Cuenta, TipoCuenta, Transferencia
+    Domain/                 Entidades: Usuario (IdentityUser<Guid>), Categoria, Subcategoria, Movimiento, TipoMovimiento, Cuenta, TipoCuenta, Transferencia
     Data/                   AppDbContext y Migrations/
     Auth/                   JWT, DTOs de auth, mensajes de Identity en español, rate limit
-    Categorias/ Cuentas/ Movimientos/ Transferencias/ Resumen/   DTOs de cada módulo (+ CategoriasPorDefecto, CuentaPorDefecto, Saldos)
-    Controllers/            Auth, Categorias, Cuentas, Movimientos, Transferencias, Resumen
+    Categorias/ Subcategorias/ Cuentas/ Movimientos/ Transferencias/ Resumen/   DTOs de cada módulo (+ CategoriasPorDefecto, CuentaPorDefecto, Saldos)
+    Controllers/            Auth, Categorias, Subcategorias, Cuentas, Movimientos, Transferencias, Resumen
     ProblemDetailsEs.cs     Traduce al español los errores que genera ASP.NET Core
   tests/MiEconomia.Api.Tests/
     Infraestructura/        ApiFactory (API en memoria + PostgreSQL en Docker con Testcontainers), helpers HTTP y de datos
-    *Tests.cs               Tests de integración por módulo: Auth, Categorias, Cuentas, Movimientos, Transferencias, Aislamiento, Resumen
+    *Tests.cs               Tests de integración por módulo: Auth, Categorias, Subcategorias, Cuentas, Movimientos, Transferencias, Aislamiento, Resumen
 frontend/
   vite.config.ts            Proxy /api -> http://localhost:5170 (en desarrollo no hace falta CORS)
   src/
@@ -72,8 +72,9 @@ Todo bajo `/api`, y todo pide `Authorization: Bearer <token>` salvo registro y l
 | Endpoint | Notas |
 |---|---|
 | `POST auth/registro`, `POST auth/login`, `GET auth/yo` | Devuelven `{ token, expiraEn, usuario }`. El token dura 60 min, todavía sin refresh token |
-| `categorias` (GET con `?tipo=`, GET/POST/PUT/DELETE `{id}`) | El tipo no se puede editar. Borrar con movimientos da 409 |
-| `movimientos` (GET con `desde, hasta, categoriaId, cuentaId, tipo, pagina, tamanio`) | Devuelve `{ items, total, pagina, tamanio }`. Cada movimiento pide `cuentaId` |
+| `categorias` (GET con `?tipo=`, GET/POST/PUT/DELETE `{id}`) | Cada categoría trae sus `subcategorias` (ordenadas por nombre). El tipo no se puede editar. Borrar con movimientos da 409; sin movimientos borra también sus subcategorías |
+| `categorias/{categoriaId}/subcategorias` (POST, PUT/DELETE `{id}`) | Solo nombre (no repetido dentro de la categoría). Borrar deja sus movimientos en la categoría sin subcategoría |
+| `movimientos` (GET con `desde, hasta, categoriaId, subcategoriaId, cuentaId, tipo, pagina, tamanio`) | Devuelve `{ items, total, pagina, tamanio }`. Cada movimiento pide `cuentaId`; `subcategoriaId` es opcional y tiene que ser de la categoría elegida |
 | `cuentas` (GET, GET/POST/PUT/DELETE `{id}`) | Devuelven el `saldo` actual (saldo inicial + ingresos − gastos ± transferencias), calculado en la base. El tipo se puede editar. Borrar con movimientos o transferencias da 409 |
 | `transferencias` (GET con `desde, hasta, cuentaId, pagina, tamanio`) | Origen y destino del mismo usuario y distintos entre sí. No son ingreso ni gasto |
 | `resumen?desde=&hasta=` | Totales y desglose por categoría; sin fechas usa el mes actual |

@@ -6,6 +6,9 @@ public class Movimiento
     public Guid UsuarioId { get; set; }
     public Guid CategoriaId { get; set; }
 
+    /// <summary>Opcional; si está, es una subcategoría de <see cref="CategoriaId"/>.</summary>
+    public Guid? SubcategoriaId { get; set; }
+
     /// <summary>De dónde salió (egreso) o adónde entró (ingreso) el dinero.</summary>
     public Guid CuentaId { get; set; }
 
@@ -17,5 +20,6 @@ public class Movimiento
 
     public Usuario Usuario { get; set; } = null!;
     public Categoria Categoria { get; set; } = null!;
+    public Subcategoria? Subcategoria { get; set; }
     public Cuenta Cuenta { get; set; } = null!;
 }

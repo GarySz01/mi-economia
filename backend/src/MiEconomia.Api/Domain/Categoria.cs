@@ -14,4 +14,5 @@ public class Categoria
 
     public Usuario Usuario { get; set; } = null!;
     public ICollection<Movimiento> Movimientos { get; set; } = new List<Movimiento>();
+    public ICollection<Subcategoria> Subcategorias { get; set; } = new List<Subcategoria>();
 }

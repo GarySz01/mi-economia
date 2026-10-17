@@ -40,6 +40,7 @@ function Formulario({
 
   const [tipo, setTipo] = useState<TipoMovimiento>(movimiento?.categoria.tipo ?? 'Egreso')
   const [categoriaId, setCategoriaId] = useState(movimiento?.categoria.id ?? '')
+  const [subcategoriaId, setSubcategoriaId] = useState(movimiento?.subcategoria?.id ?? '')
   // Vacío = todavía no se eligió: se usa la cuenta inicial o la primera (las cuentas pueden llegar después).
   const [cuentaElegida, setCuentaElegida] = useState(movimiento?.cuenta.id ?? cuentaInicial ?? '')
   const [monto, setMonto] = useState(movimiento ? montoParaEditar(movimiento.monto) : '')
@@ -48,11 +49,19 @@ function Formulario({
   const [error, setError] = useState<ApiError | null>(null)
 
   const disponibles = categorias.filter((c) => c.tipo === tipo)
+  const subcategorias = categorias.find((c) => c.id === categoriaId)?.subcategorias ?? []
   const cuentaId = cuentaElegida || (cuentas[0]?.id ?? '')
 
+  // La subcategoría depende de la categoría: al cambiar esta, se vuelve a elegir.
   const cambiarTipo = (nuevo: TipoMovimiento) => {
     setTipo(nuevo)
     setCategoriaId('')
+    setSubcategoriaId('')
+  }
+
+  const cambiarCategoria = (id: string) => {
+    setCategoriaId(id)
+    setSubcategoriaId('')
   }
 
   const enviar = async (e: FormEvent) => {
@@ -68,7 +77,14 @@ function Formulario({
     try {
       await guardar.mutateAsync({
         id: movimiento?.id,
-        datos: { categoriaId, cuentaId, monto: valor, fecha, nota: nota.trim() || null },
+        datos: {
+          categoriaId,
+          subcategoriaId: subcategoriaId || null,
+          cuentaId,
+          monto: valor,
+          fecha,
+          nota: nota.trim() || null,
+        },
       })
       onListo()
     } catch (err) {
@@ -106,7 +122,7 @@ function Formulario({
       <Select
         etiqueta="Categoría"
         value={categoriaId}
-        onChange={(e) => setCategoriaId(e.target.value)}
+        onChange={(e) => cambiarCategoria(e.target.value)}
         error={error?.campo('categoriaId')}
         disabled={isLoading}
         required
@@ -125,6 +141,22 @@ function Formulario({
             Crear una
           </Link>
         </p>
+      )}
+
+      {subcategorias.length > 0 && (
+        <Select
+          etiqueta="Subcategoría (opcional)"
+          value={subcategoriaId}
+          onChange={(e) => setSubcategoriaId(e.target.value)}
+          error={error?.campo('subcategoriaId')}
+        >
+          <option value="">Sin subcategoría</option>
+          {subcategorias.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.nombre}
+            </option>
+          ))}
+        </Select>
       )}
 
       <Select

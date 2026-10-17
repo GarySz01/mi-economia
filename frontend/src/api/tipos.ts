@@ -22,6 +22,17 @@ export interface Categoria {
   icono: string | null
 }
 
+export interface Subcategoria {
+  id: string
+  nombre: string
+}
+
+/** Lo que devuelven los endpoints de categorías. En movimientos y en el resumen viene sin subcategorías. */
+export interface CategoriaConSubcategorias extends Categoria {
+  /** Ordenadas por nombre. */
+  subcategorias: Subcategoria[]
+}
+
 export interface CategoriaInput {
   nombre: string
   tipo: TipoMovimiento
@@ -88,10 +99,13 @@ export interface Movimiento {
   nota: string | null
   categoria: Categoria
   cuenta: CuentaBasica
+  subcategoria: Subcategoria | null
 }
 
 export interface MovimientoInput {
   categoriaId: string
+  /** Opcional; tiene que ser de la categoría elegida. */
+  subcategoriaId: string | null
   cuentaId: string
   monto: number
   fecha: string
@@ -102,6 +116,7 @@ export interface MovimientosFiltro {
   desde?: string
   hasta?: string
   categoriaId?: string
+  subcategoriaId?: string
   cuentaId?: string
   tipo?: TipoMovimiento
   pagina?: number

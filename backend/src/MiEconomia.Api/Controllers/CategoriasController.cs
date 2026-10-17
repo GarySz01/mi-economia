@@ -19,27 +19,27 @@ public class CategoriasController(AppDbContext db) : ControllerBase
     private IQueryable<Categoria> MisCategorias => db.Categorias.Where(c => c.UsuarioId == UsuarioId);
 
     [HttpGet]
-    public async Task<IReadOnlyList<CategoriaResponse>> Listar([FromQuery] TipoMovimiento? tipo)
+    public async Task<IReadOnlyList<CategoriaConSubcategoriasResponse>> Listar([FromQuery] TipoMovimiento? tipo)
     {
-        var query = MisCategorias.AsNoTracking();
+        var query = MisCategorias.Include(c => c.Subcategorias).AsNoTracking();
         if (tipo is not null)
             query = query.Where(c => c.Tipo == tipo);
 
         var categorias = await query.OrderBy(c => c.Tipo).ThenBy(c => c.Nombre).ToListAsync();
-        return categorias.Select(CategoriaResponse.Desde).ToList();
+        return categorias.Select(CategoriaConSubcategoriasResponse.Desde).ToList();
     }
 
     [HttpGet("{id:guid}")]
-    [ProducesResponseType<CategoriaResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<CategoriaConSubcategoriasResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Obtener(Guid id)
     {
-        var categoria = await MisCategorias.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
-        return categoria is null ? NotFound() : Ok(CategoriaResponse.Desde(categoria));
+        var categoria = await MisCategorias.Include(c => c.Subcategorias).AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
+        return categoria is null ? NotFound() : Ok(CategoriaConSubcategoriasResponse.Desde(categoria));
     }
 
     [HttpPost]
-    [ProducesResponseType<CategoriaResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<CategoriaConSubcategoriasResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Crear(CrearCategoriaRequest request)
     {
@@ -62,16 +62,16 @@ public class CategoriasController(AppDbContext db) : ControllerBase
         if (!await GuardarCambios())
             return NombreDuplicado(nombre);
 
-        return CreatedAtAction(nameof(Obtener), new { id = categoria.Id }, CategoriaResponse.Desde(categoria));
+        return CreatedAtAction(nameof(Obtener), new { id = categoria.Id }, CategoriaConSubcategoriasResponse.Desde(categoria));
     }
 
     [HttpPut("{id:guid}")]
-    [ProducesResponseType<CategoriaResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<CategoriaConSubcategoriasResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Actualizar(Guid id, ActualizarCategoriaRequest request)
     {
-        var categoria = await MisCategorias.FirstOrDefaultAsync(c => c.Id == id);
+        var categoria = await MisCategorias.Include(c => c.Subcategorias).FirstOrDefaultAsync(c => c.Id == id);
         if (categoria is null)
             return NotFound();
 
@@ -86,7 +86,7 @@ public class CategoriasController(AppDbContext db) : ControllerBase
         if (!await GuardarCambios())
             return NombreDuplicado(nombre);
 
-        return Ok(CategoriaResponse.Desde(categoria));
+        return Ok(CategoriaConSubcategoriasResponse.Desde(categoria));
     }
 
     [HttpDelete("{id:guid}")]
