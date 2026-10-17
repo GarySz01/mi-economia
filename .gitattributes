@@ -1,0 +1,2 @@
+# El volcado de la base se guarda tal cual: si git le cambiara los saltos de línea a CRLF, los datos se importarían con un \r de más.
+datos/*.sql -text

@@ -61,6 +61,22 @@ dotnet ef migrations add <Nombre> -p src/MiEconomia.Api -o Data/Migrations
 dotnet ef database update -p src/MiEconomia.Api
 ```
 
+### Datos entre PCs
+
+El usuario trabaja en dos PCs y sus datos reales viajan por git (el repo es privado) en `datos/mieconomia.sql`, un volcado completo de la base (incluye usuarios con el hash de la contraseña).
+
+```powershell
+# Al terminar de usar una PC (desde la raíz del repo):
+powershell -ExecutionPolicy Bypass -File scripts\exportar-datos.ps1
+git add datos; git commit -m "Actualizar datos"; git push
+
+# Al llegar a la otra (con Docker corriendo y la API detenida):
+git pull
+powershell -ExecutionPolicy Bypass -File scripts\importar-datos.ps1   # reemplaza la base y aplica las migraciones
+```
+
+Importar **reemplaza** la base local (antes la respalda en `datos/respaldos/`, que no se sube). No hay mezcla: si se cargan datos en las dos PCs sin sincronizar, gana el último que se importa.
+
 Secretos en **user-secrets** del proyecto API, nunca en `appsettings*.json`:
 - `ConnectionStrings:Default`: `Host=localhost;Port=5432;Database=mieconomia;Username=mieconomia;Password=<la de .env>`
 - `Jwt:Key`: clave aleatoria de al menos 32 caracteres (en producción, variable de entorno `Jwt__Key`).

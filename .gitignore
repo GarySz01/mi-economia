@@ -24,3 +24,6 @@ Thumbs.db
 
 # Claude Code (config local de cada máquina)
 .claude/settings.local.json
+
+# Respaldos locales que hace scripts/importar-datos.ps1
+datos/respaldos/
